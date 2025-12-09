@@ -1,0 +1,2228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinanceFlow - Sistema de Gestão Financeira</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+        }
+        
+        .dark {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #475569;
+        }
+        
+        .light {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e2e8f0;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+        }
+        
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .light .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+        }
+        
+        .nav-item {
+            transition: all 0.2s ease;
+        }
+        
+        .nav-item:hover, .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+            border-left: 3px solid var(--primary);
+        }
+        
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(99, 102, 241, 0.15);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+        }
+        
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+        
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .table-row {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+        
+        .table-row:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .input-field {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        
+        .input-field:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+        
+        .badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 500;
+        }
+        
+        .badge-success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+        .badge-warning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+        .badge-danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .badge-info { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .badge-gray { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+        
+        .floating-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.5);
+            transition: all 0.3s ease;
+            z-index: 50;
+        }
+        
+        .floating-btn:hover {
+            transform: scale(1.1) rotate(90deg);
+        }
+        
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ef4444;
+            color: white;
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 9999px;
+            font-weight: 600;
+        }
+        
+        .scroll-custom::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .scroll-custom::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+        }
+        
+        .scroll-custom::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 3px;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .animate-slide-in {
+            animation: slideIn 0.3s ease forwards;
+        }
+        
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease forwards;
+        }
+        
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                position: fixed;
+                z-index: 100;
+                height: 100vh;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+        }
+    </style>
+</head>
+<body class="dark">
+    <!-- Mobile Menu Overlay -->
+    <div id="mobileOverlay" class="fixed inset-0 bg-black/50 z-90 hidden md:hidden" onclick="toggleMobileMenu()"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar fixed left-0 top-0 h-screen w-64 flex flex-col z-100 transition-transform duration-300">
+        <!-- Logo -->
+        <div class="p-6 border-b border-[var(--border-color)]">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                    <i class="fas fa-wallet text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">FinanceFlow</h1>
+                    <p class="text-xs text-[var(--text-secondary)]">Gestão Financeira</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 py-4 overflow-y-auto scroll-custom">
+            <div class="px-4 mb-2">
+                <span class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Menu Principal</span>
+            </div>
+            <ul class="space-y-1 px-3">
+                <li>
+                    <a href="#" class="nav-item active flex items-center gap-3 px-4 py-3 rounded-lg text-[var(--text-primary)]" data-page="dashboard">
+                        <i class="fas fa-chart-pie w-5"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]" data-page="payables">
+                        <i class="fas fa-file-invoice-dollar w-5"></i>
+                        <span>Contas a Pagar</span>
+                        <span id="payablesBadge" class="ml-auto badge badge-danger hidden">0</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]" data-page="receivables">
+                        <i class="fas fa-hand-holding-usd w-5"></i>
+                        <span>Contas a Receber</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]" data-page="reports">
+                        <i class="fas fa-chart-bar w-5"></i>
+                        <span>Relatórios</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]" data-page="categories">
+                        <i class="fas fa-tags w-5"></i>
+                        <span>Categorias</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="px-4 mt-6 mb-2">
+                <span class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Sistema</span>
+            </div>
+            <ul class="space-y-1 px-3">
+                <li>
+                    <a href="#" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]" data-page="settings">
+                        <i class="fas fa-cog w-5"></i>
+                        <span>Configurações</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- User Profile -->
+        <div class="p-4 border-t border-[var(--border-color)]">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                    <span id="userInitials" class="text-white font-semibold">U</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p id="userName" class="text-sm font-medium truncate">Usuário</p>
+                    <p id="userEmail" class="text-xs text-[var(--text-secondary)] truncate">usuario@email.com</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="md:ml-64 min-h-screen">
+        <!-- Header -->
+        <header class="sticky top-0 z-40 bg-[var(--bg-primary)]/80 backdrop-blur-lg border-b border-[var(--border-color)]">
+            <div class="flex items-center justify-between px-4 md:px-6 py-4">
+                <div class="flex items-center gap-4">
+                    <button onclick="toggleMobileMenu()" class="md:hidden p-2 rounded-lg hover:bg-[var(--bg-tertiary)]">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    <div>
+                        <h2 id="pageTitle" class="text-xl font-bold">Dashboard</h2>
+                        <p id="breadcrumb" class="text-sm text-[var(--text-secondary)]">Início / Dashboard</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <!-- Search -->
+                    <div class="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--bg-tertiary)]">
+                        <i class="fas fa-search text-[var(--text-secondary)]"></i>
+                        <input type="text" id="globalSearch" placeholder="Buscar..." class="bg-transparent border-none outline-none text-sm w-40" onkeyup="handleGlobalSearch(event)">
+                    </div>
+                    <!-- Notifications -->
+                    <button onclick="showNotifications()" class="relative p-2 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors">
+                        <i class="fas fa-bell text-xl"></i>
+                        <span id="notificationBadge" class="notification-badge hidden">0</span>
+                    </button>
+                    <!-- Theme Toggle -->
+                    <button onclick="toggleTheme()" class="p-2 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors">
+                        <i id="themeIcon" class="fas fa-moon text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <div id="pageContent" class="p-4 md:p-6">
+            <!-- Dashboard will be loaded here -->
+        </div>
+    </main>
+
+    <!-- Floating Action Button -->
+    <button onclick="openAddAccountModal()" class="floating-btn flex items-center justify-center text-white">
+        <i class="fas fa-plus text-2xl"></i>
+    </button>
+
+    <!-- Modal Container -->
+    <div id="modalContainer" class="fixed inset-0 z-200 hidden">
+        <!-- Modal will be injected here -->
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed bottom-4 left-4 z-300 space-y-2"></div>
+
+    <!-- Notifications Panel -->
+    <div id="notificationsPanel" class="fixed right-0 top-0 h-screen w-80 bg-[var(--bg-secondary)] border-l border-[var(--border-color)] z-150 transform translate-x-full transition-transform duration-300">
+        <div class="p-4 border-b border-[var(--border-color)] flex items-center justify-between">
+            <h3 class="font-bold">Notificações</h3>
+            <button onclick="hideNotifications()" class="p-2 rounded-lg hover:bg-[var(--bg-tertiary)]">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="notificationsList" class="p-4 space-y-3 overflow-y-auto scroll-custom" style="max-height: calc(100vh - 80px);">
+            <!-- Notifications will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // DATA MANAGEMENT
+        // ============================================
+        const DB = {
+            users: [],
+            categories: [],
+            accounts: [],
+            settings: {
+                theme: 'dark',
+                notifications: true,
+                currency: 'BRL'
+            },
+            currentUser: null
+        };
+
+        // Initialize default data
+        function initializeData() {
+            const savedData = localStorage.getItem('financeFlowDB');
+            if (savedData) {
+                const parsed = JSON.parse(savedData);
+                Object.assign(DB, parsed);
+            } else {
+                // Create default user
+                DB.currentUser = {
+                    id: generateId(),
+                    name: 'Usuário',
+                    email: 'usuario@email.com',
+                    createdAt: new Date().toISOString()
+                };
+                DB.users.push(DB.currentUser);
+
+                // Create default categories
+                DB.categories = [
+                    { id: generateId(), name: 'Alimentação', type: 'pagar', color: '#f59e0b', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Transporte', type: 'pagar', color: '#3b82f6', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Moradia', type: 'pagar', color: '#8b5cf6', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Saúde', type: 'pagar', color: '#ef4444', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Educação', type: 'pagar', color: '#06b6d4', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Lazer', type: 'pagar', color: '#ec4899', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Serviços', type: 'pagar', color: '#14b8a6', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Outros Gastos', type: 'pagar', color: '#6b7280', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Salário', type: 'receber', color: '#10b981', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Freelance', type: 'receber', color: '#6366f1', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Investimentos', type: 'receber', color: '#f59e0b', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Vendas', type: 'receber', color: '#8b5cf6', userId: DB.currentUser.id },
+                    { id: generateId(), name: 'Outros Recebimentos', type: 'receber', color: '#6b7280', userId: DB.currentUser.id }
+                ];
+
+                // Create sample accounts
+                const today = new Date();
+                const thisMonth = today.getMonth();
+                const thisYear = today.getFullYear();
+
+                DB.accounts = [
+                    {
+                        id: generateId(),
+                        type: 'pagar',
+                        title: 'Aluguel',
+                        description: 'Aluguel mensal do apartamento',
+                        value: 1500.00,
+                        dueDate: new Date(thisYear, thisMonth, 10).toISOString(),
+                        paymentDate: null,
+                        status: 'pendente',
+                        categoryId: DB.categories.find(c => c.name === 'Moradia').id,
+                        paymentMethod: 'pix',
+                        recurrence: 'mensal',
+                        attachments: [],
+                        userId: DB.currentUser.id,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: generateId(),
+                        type: 'pagar',
+                        title: 'Internet',
+                        description: 'Plano de internet fibra',
+                        value: 120.00,
+                        dueDate: new Date(thisYear, thisMonth, 15).toISOString(),
+                        paymentDate: null,
+                        status: 'pendente',
+                        categoryId: DB.categories.find(c => c.name === 'Serviços').id,
+                        paymentMethod: 'boleto',
+                        recurrence: 'mensal',
+                        attachments: [],
+                        userId: DB.currentUser.id,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: generateId(),
+                        type: 'pagar',
+                        title: 'Energia Elétrica',
+                        description: 'Conta de luz',
+                        value: 280.00,
+                        dueDate: new Date(thisYear, thisMonth, 5).toISOString(),
+                        paymentDate: new Date(thisYear, thisMonth, 4).toISOString(),
+                        status: 'pago',
+                        categoryId: DB.categories.find(c => c.name === 'Moradia').id,
+                        paymentMethod: 'pix',
+                        recurrence: 'mensal',
+                        attachments: [],
+                        userId: DB.currentUser.id,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: generateId(),
+                        type: 'receber',
+                        title: 'Salário',
+                        description: 'Salário mensal',
+                        value: 5000.00,
+                        dueDate: new Date(thisYear, thisMonth, 5).toISOString(),
+                        paymentDate: new Date(thisYear, thisMonth, 5).toISOString(),
+                        status: 'recebido',
+                        categoryId: DB.categories.find(c => c.name === 'Salário').id,
+                        paymentMethod: 'transferencia',
+                        recurrence: 'mensal',
+                        attachments: [],
+                        userId: DB.currentUser.id,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: generateId(),
+                        type: 'receber',
+                        title: 'Projeto Freelance',
+                        description: 'Desenvolvimento de website',
+                        value: 2500.00,
+                        dueDate: new Date(thisYear, thisMonth, 20).toISOString(),
+                        paymentDate: null,
+                        status: 'pendente',
+                        categoryId: DB.categories.find(c => c.name === 'Freelance').id,
+                        paymentMethod: 'pix',
+                        recurrence: 'nenhuma',
+                        attachments: [],
+                        userId: DB.currentUser.id,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    }
+                ];
+
+                saveData();
+            }
+
+            // Update overdue status
+            updateOverdueStatus();
+            generateRecurringAccounts();
+        }
+
+        function saveData() {
+            localStorage.setItem('financeFlowDB', JSON.stringify(DB));
+        }
+
+        function generateId() {
+            return 'id_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+        }
+
+        function updateOverdueStatus() {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            DB.accounts.forEach(account => {
+                if (account.status === 'pendente') {
+                    const dueDate = new Date(account.dueDate);
+                    dueDate.setHours(0, 0, 0, 0);
+                    if (dueDate < today) {
+                        account.status = 'atrasado';
+                        account.updatedAt = new Date().toISOString();
+                    }
+                }
+            });
+            saveData();
+        }
+
+        function generateRecurringAccounts() {
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+
+            DB.accounts.filter(a => a.recurrence !== 'nenhuma').forEach(account => {
+                const dueDate = new Date(account.dueDate);
+                let nextDueDate;
+
+                switch(account.recurrence) {
+                    case 'semanal':
+                        nextDueDate = new Date(dueDate);
+                        nextDueDate.setDate(nextDueDate.getDate() + 7);
+                        break;
+                    case 'mensal':
+                        nextDueDate = new Date(dueDate);
+                        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+                        break;
+                    case 'anual':
+                        nextDueDate = new Date(dueDate);
+                        nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
+                        break;
+                }
+
+                if (nextDueDate && nextDueDate <= new Date(currentYear, currentMonth + 2, 0)) {
+                    const exists = DB.accounts.some(a => 
+                        a.title === account.title && 
+                        new Date(a.dueDate).toDateString() === nextDueDate.toDateString()
+                    );
+
+                    if (!exists && (account.status === 'pago' || account.status === 'recebido')) {
+                        const newAccount = {
+                            ...account,
+                            id: generateId(),
+                            dueDate: nextDueDate.toISOString(),
+                            paymentDate: null,
+                            status: 'pendente',
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                        };
+                        DB.accounts.push(newAccount);
+                    }
+                }
+            });
+            saveData();
+        }
+
+        // ============================================
+        // UI HELPERS
+        // ============================================
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+            }).format(value);
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            return new Date(dateString).toLocaleDateString('pt-BR');
+        }
+
+        function formatDateInput(dateString) {
+            if (!dateString) return '';
+            return new Date(dateString).toISOString().split('T')[0];
+        }
+
+        function getStatusBadge(status) {
+            const badges = {
+                'pendente': '<span class="badge badge-info">Pendente</span>',
+                'pago': '<span class="badge badge-success">Pago</span>',
+                'recebido': '<span class="badge badge-success">Recebido</span>',
+                'atrasado': '<span class="badge badge-danger">Atrasado</span>',
+                'cancelado': '<span class="badge badge-gray">Cancelado</span>'
+            };
+            return badges[status] || status;
+        }
+
+        function getPaymentMethodLabel(method) {
+            const methods = {
+                'pix': 'PIX',
+                'cartao': 'Cartão',
+                'boleto': 'Boleto',
+                'dinheiro': 'Dinheiro',
+                'transferencia': 'Transferência'
+            };
+            return methods[method] || method;
+        }
+
+        function getRecurrenceLabel(recurrence) {
+            const labels = {
+                'nenhuma': 'Única',
+                'semanal': 'Semanal',
+                'mensal': 'Mensal',
+                'anual': 'Anual'
+            };
+            return labels[recurrence] || recurrence;
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const icons = {
+                'success': 'fa-check-circle text-green-500',
+                'error': 'fa-exclamation-circle text-red-500',
+                'warning': 'fa-exclamation-triangle text-yellow-500',
+                'info': 'fa-info-circle text-blue-500'
+            };
+            
+            toast.className = 'flex items-center gap-3 px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] shadow-lg animate-slide-in';
+            toast.innerHTML = `
+                <i class="fas ${icons[type]} text-xl"></i>
+                <span>${message}</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(-100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // ============================================
+        // NAVIGATION
+        // ============================================
+        let currentPage = 'dashboard';
+        let charts = {};
+
+        function navigateTo(page) {
+            currentPage = page;
+            
+            // Update nav items
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+                item.classList.remove('text-[var(--text-primary)]');
+                item.classList.add('text-[var(--text-secondary)]');
+                if (item.dataset.page === page) {
+                    item.classList.add('active');
+                    item.classList.add('text-[var(--text-primary)]');
+                    item.classList.remove('text-[var(--text-secondary)]');
+                }
+            });
+
+            // Update page title and breadcrumb
+            const titles = {
+                'dashboard': { title: 'Dashboard', breadcrumb: 'Início / Dashboard' },
+                'payables': { title: 'Contas a Pagar', breadcrumb: 'Início / Contas a Pagar' },
+                'receivables': { title: 'Contas a Receber', breadcrumb: 'Início / Contas a Receber' },
+                'reports': { title: 'Relatórios', breadcrumb: 'Início / Relatórios' },
+                'categories': { title: 'Categorias', breadcrumb: 'Início / Categorias' },
+                'settings': { title: 'Configurações', breadcrumb: 'Início / Configurações' }
+            };
+
+            document.getElementById('pageTitle').textContent = titles[page].title;
+            document.getElementById('breadcrumb').textContent = titles[page].breadcrumb;
+
+            // Render page content
+            renderPage(page);
+            
+            // Close mobile menu
+            if (window.innerWidth < 768) {
+                toggleMobileMenu();
+            }
+        }
+
+        function renderPage(page) {
+            const content = document.getElementById('pageContent');
+            
+            // Destroy existing charts
+            Object.values(charts).forEach(chart => chart.destroy());
+            charts = {};
+
+            switch(page) {
+                case 'dashboard':
+                    content.innerHTML = renderDashboard();
+                    initDashboardCharts();
+                    break;
+                case 'payables':
+                    content.innerHTML = renderAccountsList('pagar');
+                    break;
+                case 'receivables':
+                    content.innerHTML = renderAccountsList('receber');
+                    break;
+                case 'reports':
+                    content.innerHTML = renderReports();
+                    initReportCharts();
+                    break;
+                case 'categories':
+                    content.innerHTML = renderCategories();
+                    break;
+                case 'settings':
+                    content.innerHTML = renderSettings();
+                    break;
+            }
+        }
+
+        // ============================================
+        // DASHBOARD
+        // ============================================
+        function renderDashboard() {
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+
+            // Filter accounts for current month
+            const monthAccounts = DB.accounts.filter(a => {
+                const dueDate = new Date(a.dueDate);
+                return dueDate.getMonth() === currentMonth && dueDate.getFullYear() === currentYear;
+            });
+
+            const totalPayable = monthAccounts.filter(a => a.type === 'pagar').reduce((sum, a) => sum + a.value, 0);
+            const totalReceivable = monthAccounts.filter(a => a.type === 'receber').reduce((sum, a) => sum + a.value, 0);
+            const balance = totalReceivable - totalPayable;
+            const overdueCount = DB.accounts.filter(a => a.status === 'atrasado').length;
+            const upcomingAccounts = DB.accounts
+                .filter(a => a.status === 'pendente' || a.status === 'atrasado')
+                .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+                .slice(0, 5);
+
+            return `
+                <div class="space-y-6 animate-fade-in">
+                    <!-- Stats Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="stat-card rounded-2xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
+                                    <i class="fas fa-arrow-down text-red-500 text-xl"></i>
+                                </div>
+                                <span class="text-xs text-[var(--text-secondary)]">Este mês</span>
+                            </div>
+                            <p class="text-2xl font-bold text-red-500">${formatCurrency(totalPayable)}</p>
+                            <p class="text-sm text-[var(--text-secondary)]">Total a Pagar</p>
+                        </div>
+
+                        <div class="stat-card rounded-2xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                                    <i class="fas fa-arrow-up text-green-500 text-xl"></i>
+                                </div>
+                                <span class="text-xs text-[var(--text-secondary)]">Este mês</span>
+                            </div>
+                            <p class="text-2xl font-bold text-green-500">${formatCurrency(totalReceivable)}</p>
+                            <p class="text-sm text-[var(--text-secondary)]">Total a Receber</p>
+                        </div>
+
+                        <div class="stat-card rounded-2xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                                    <i class="fas fa-wallet text-indigo-500 text-xl"></i>
+                                </div>
+                                <span class="text-xs text-[var(--text-secondary)]">Balanço</span>
+                            </div>
+                            <p class="text-2xl font-bold ${balance >= 0 ? 'text-green-500' : 'text-red-500'}">${formatCurrency(balance)}</p>
+                            <p class="text-sm text-[var(--text-secondary)]">Saldo do Mês</p>
+                        </div>
+
+                        <div class="stat-card rounded-2xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 rounded-xl bg-yellow-500/20 flex items-center justify-center">
+                                    <i class="fas fa-exclamation-triangle text-yellow-500 text-xl"></i>
+                                </div>
+                                <span class="text-xs text-[var(--text-secondary)]">Atenção</span>
+                            </div>
+                            <p class="text-2xl font-bold text-yellow-500">${overdueCount}</p>
+                            <p class="text-sm text-[var(--text-secondary)]">Contas Atrasadas</p>
+                        </div>
+                    </div>
+
+                    <!-- Charts Row -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="stat-card rounded-2xl p-6">
+                            <h3 class="text-lg font-bold mb-4">Fluxo Mensal</h3>
+                            <div class="h-64">
+                                <canvas id="monthlyFlowChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="stat-card rounded-2xl p-6">
+                            <h3 class="text-lg font-bold mb-4">Despesas por Categoria</h3>
+                            <div class="h-64">
+                                <canvas id="categoryChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Upcoming Accounts -->
+                    <div class="stat-card rounded-2xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold">Próximas Contas</h3>
+                            <button onclick="navigateTo('payables')" class="text-sm text-indigo-500 hover:underline">Ver todas</button>
+                        </div>
+                        <div class="space-y-3">
+                            ${upcomingAccounts.length === 0 ? `
+                                <p class="text-center text-[var(--text-secondary)] py-8">Nenhuma conta pendente</p>
+                            ` : upcomingAccounts.map(account => {
+                                const category = DB.categories.find(c => c.id === account.categoryId);
+                                const daysUntil = Math.ceil((new Date(account.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
+                                return `
+                                    <div class="table-row rounded-xl p-4 flex items-center justify-between">
+                                        <div class="flex items-center gap-4">
+                                            <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: ${category?.color}20">
+                                                <i class="fas ${account.type === 'pagar' ? 'fa-arrow-down text-red-500' : 'fa-arrow-up text-green-500'}"></i>
+                                            </div>
+                                            <div>
+                                                <p class="font-medium">${account.title}</p>
+                                                <p class="text-sm text-[var(--text-secondary)]">${category?.name || 'Sem categoria'}</p>
+                                            </div>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="font-bold ${account.type === 'pagar' ? 'text-red-500' : 'text-green-500'}">${formatCurrency(account.value)}</p>
+                                            <p class="text-sm ${account.status === 'atrasado' ? 'text-red-500' : 'text-[var(--text-secondary)]'}">
+                                                ${account.status === 'atrasado' ? 'Atrasado' : daysUntil === 0 ? 'Hoje' : daysUntil === 1 ? 'Amanhã' : `Em ${daysUntil} dias`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function initDashboardCharts() {
+            const today = new Date();
+            const months = [];
+            const payableData = [];
+            const receivableData = [];
+
+            // Get last 6 months data
+            for (let i = 5; i >= 0; i--) {
+                const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                months.push(date.toLocaleDateString('pt-BR', { month: 'short' }));
+
+                const monthAccounts = DB.accounts.filter(a => {
+                    const dueDate = new Date(a.dueDate);
+                    return dueDate.getMonth() === date.getMonth() && dueDate.getFullYear() === date.getFullYear();
+                });
+
+                payableData.push(monthAccounts.filter(a => a.type === 'pagar').reduce((sum, a) => sum + a.value, 0));
+                receivableData.push(monthAccounts.filter(a => a.type === 'receber').reduce((sum, a) => sum + a.value, 0));
+            }
+
+            // Monthly Flow Chart
+            const flowCtx = document.getElementById('monthlyFlowChart')?.getContext('2d');
+            if (flowCtx) {
+                charts.monthlyFlow = new Chart(flowCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: months,
+                        datasets: [
+                            {
+                                label: 'A Pagar',
+                                data: payableData,
+                                backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                                borderRadius: 8
+                            },
+                            {
+                                label: 'A Receber',
+                                data: receivableData,
+                                backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                                borderRadius: 8
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') }
+                            }
+                        },
+                        scales: {
+                            x: { 
+                                grid: { display: false },
+                                ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary') }
+                            },
+                            y: { 
+                                grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                                ticks: { 
+                                    color: getComputedStyle(document.body).getPropertyValue('--text-secondary'),
+                                    callback: value => formatCurrency(value)
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Category Chart
+            const categoryData = {};
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+
+            DB.accounts
+                .filter(a => {
+                    const dueDate = new Date(a.dueDate);
+                    return a.type === 'pagar' && dueDate.getMonth() === currentMonth && dueDate.getFullYear() === currentYear;
+                })
+                .forEach(a => {
+                    const category = DB.categories.find(c => c.id === a.categoryId);
+                    if (category) {
+                        categoryData[category.name] = (categoryData[category.name] || 0) + a.value;
+                    }
+                });
+
+            const categoryCtx = document.getElementById('categoryChart')?.getContext('2d');
+            if (categoryCtx) {
+                charts.category = new Chart(categoryCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(categoryData),
+                        datasets: [{
+                            data: Object.values(categoryData),
+                            backgroundColor: Object.keys(categoryData).map(name => {
+                                const cat = DB.categories.find(c => c.name === name);
+                                return cat?.color || '#6b7280';
+                            }),
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { 
+                                    color: getComputedStyle(document.body).getPropertyValue('--text-primary'),
+                                    usePointStyle: true,
+                                    padding: 15
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // ============================================
+        // ACCOUNTS LIST
+        // ============================================
+        function renderAccountsList(type) {
+            const accounts = DB.accounts.filter(a => a.type === type);
+            const typeLabel = type === 'pagar' ? 'Pagar' : 'Receber';
+            const statusLabel = type === 'pagar' ? 'pago' : 'recebido';
+
+            return `
+                <div class="space-y-6 animate-fade-in">
+                    <!-- Filters -->
+                    <div class="stat-card rounded-2xl p-4">
+                        <div class="flex flex-wrap gap-4">
+                            <div class="flex-1 min-w-[200px]">
+                                <div class="relative">
+                                    <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--text-secondary)]"></i>
+                                    <input type="text" id="searchInput" placeholder="Buscar conta..." 
+                                        class="input-field w-full pl-10 pr-4 py-2 rounded-xl"
+                                        onkeyup="filterAccounts('${type}')">
+                                </div>
+                            </div>
+                            <select id="statusFilter" class="input-field px-4 py-2 rounded-xl" onchange="filterAccounts('${type}')">
+                                <option value="">Todos os Status</option>
+                                <option value="pendente">Pendente</option>
+                                <option value="${statusLabel}">${statusLabel === 'pago' ? 'Pago' : 'Recebido'}</option>
+                                <option value="atrasado">Atrasado</option>
+                                <option value="cancelado">Cancelado</option>
+                            </select>
+                            <select id="categoryFilter" class="input-field px-4 py-2 rounded-xl" onchange="filterAccounts('${type}')">
+                                <option value="">Todas as Categorias</option>
+                                ${DB.categories.filter(c => c.type === type).map(c => `
+                                    <option value="${c.id}">${c.name}</option>
+                                `).join('')}
+                            </select>
+                            <select id="periodFilter" class="input-field px-4 py-2 rounded-xl" onchange="filterAccounts('${type}')">
+                                <option value="">Todo o Período</option>
+                                <option value="thisMonth">Este Mês</option>
+                                <option value="lastMonth">Mês Passado</option>
+                                <option value="thisYear">Este Ano</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Accounts List -->
+                    <div id="accountsList" class="space-y-3">
+                        ${renderAccountsItems(accounts)}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderAccountsItems(accounts) {
+            if (accounts.length === 0) {
+                return `
+                    <div class="stat-card rounded-2xl p-12 text-center">
+                        <i class="fas fa-inbox text-6xl text-[var(--text-secondary)] mb-4"></i>
+                        <p class="text-xl text-[var(--text-secondary)]">Nenhuma conta encontrada</p>
+                        <button onclick="openAddAccountModal()" class="btn-primary mt-4 px-6 py-2 rounded-xl text-white">
+                            <i class="fas fa-plus mr-2"></i>Adicionar Conta
+                        </button>
+                    </div>
+                `;
+            }
+
+            return accounts.map(account => {
+                const category = DB.categories.find(c => c.id === account.categoryId);
+                return `
+                    <div class="table-row rounded-xl p-4 flex flex-col md:flex-row md:items-center gap-4">
+                        <div class="flex items-center gap-4 flex-1">
+                            <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background: ${category?.color}20">
+                                <div class="w-3 h-3 rounded-full" style="background: ${category?.color}"></div>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-semibold truncate">${account.title}</p>
+                                <p class="text-sm text-[var(--text-secondary)]">${category?.name || 'Sem categoria'} • ${getRecurrenceLabel(account.recurrence)}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4 md:gap-8">
+                            <div class="text-center">
+                                <p class="text-xs text-[var(--text-secondary)]">Vencimento</p>
+                                <p class="font-medium">${formatDate(account.dueDate)}</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-xs text-[var(--text-secondary)]">Valor</p>
+                                <p class="font-bold ${account.type === 'pagar' ? 'text-red-500' : 'text-green-500'}">${formatCurrency(account.value)}</p>
+                            </div>
+                            <div class="text-center">
+                                ${getStatusBadge(account.status)}
+                            </div>
+                            <div class="flex items-center gap-2">
+                                ${account.status === 'pendente' || account.status === 'atrasado' ? `
+                                    <button onclick="markAsPaid('${account.id}')" 
+                                        class="p-2 rounded-lg bg-green-500/20 text-green-500 hover:bg-green-500/30 transition-colors"
+                                        title="Marcar como ${account.type === 'pagar' ? 'Pago' : 'Recebido'}">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                ` : ''}
+                                <button onclick="editAccount('${account.id}')" 
+                                    class="p-2 rounded-lg bg-indigo-500/20 text-indigo-500 hover:bg-indigo-500/30 transition-colors"
+                                    title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="deleteAccount('${account.id}')" 
+                                    class="p-2 rounded-lg bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-colors"
+                                    title="Excluir">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterAccounts(type) {
+            const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
+            const status = document.getElementById('statusFilter')?.value || '';
+            const category = document.getElementById('categoryFilter')?.value || '';
+            const period = document.getElementById('periodFilter')?.value || '';
+
+            let accounts = DB.accounts.filter(a => a.type === type);
+
+            if (search) {
+                accounts = accounts.filter(a => 
+                    a.title.toLowerCase().includes(search) || 
+                    a.description?.toLowerCase().includes(search)
+                );
+            }
+
+            if (status) {
+                accounts = accounts.filter(a => a.status === status);
+            }
+
+            if (category) {
+                accounts = accounts.filter(a => a.categoryId === category);
+            }
+
+            if (period) {
+                const today = new Date();
+                accounts = accounts.filter(a => {
+                    const dueDate = new Date(a.dueDate);
+                    switch(period) {
+                        case 'thisMonth':
+                            return dueDate.getMonth() === today.getMonth() && dueDate.getFullYear() === today.getFullYear();
+                        case 'lastMonth':
+                            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                            return dueDate.getMonth() === lastMonth.getMonth() && dueDate.getFullYear() === lastMonth.getFullYear();
+                        case 'thisYear':
+                            return dueDate.getFullYear() === today.getFullYear();
+                        default:
+                            return true;
+                    }
+                });
+            }
+
+            document.getElementById('accountsList').innerHTML = renderAccountsItems(accounts);
+        }
+
+        // ============================================
+        // REPORTS
+        // ============================================
+        function renderReports() {
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+
+            // Calculate totals
+            const allAccounts = DB.accounts;
+            const monthAccounts = allAccounts.filter(a => {
+                const date = new Date(a.dueDate);
+                return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+            });
+
+            const totalPaid = monthAccounts.filter(a => a.type === 'pagar' && a.status === 'pago').reduce((s, a) => s + a.value, 0);
+            const totalReceived = monthAccounts.filter(a => a.type === 'receber' && a.status === 'recebido').reduce((s, a) => s + a.value, 0);
+            const totalPending = monthAccounts.filter(a => a.status === 'pendente' || a.status === 'atrasado').reduce((s, a) => s + a.value, 0);
+
+            return `
+                <div class="space-y-6 animate-fade-in">
+                    <!-- Export Buttons -->
+                    <div class="flex flex-wrap gap-4">
+                        <button onclick="exportToPDF()" class="btn-primary px-6 py-3 rounded-xl text-white flex items-center gap-2">
+                            <i class="fas fa-file-pdf"></i>
+                            Exportar PDF
+                        </button>
+                        <button onclick="exportToExcel()" class="px-6 py-3 rounded-xl bg-green-600 text-white flex items-center gap-2 hover:bg-green-700 transition-colors">
+                            <i class="fas fa-file-excel"></i>
+                            Exportar Excel
+                        </button>
+                    </div>
+
+                    <!-- Summary Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="stat-card rounded-2xl p-6">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                                    <i class="fas fa-check-circle text-green-500 text-xl"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-[var(--text-secondary)]">Total Pago</p>
+                                    <p class="text-xl font-bold text-green-500">${formatCurrency(totalPaid)}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="stat-card rounded-2xl p-6">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                                    <i class="fas fa-hand-holding-usd text-indigo-500 text-xl"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-[var(--text-secondary)]">Total Recebido</p>
+                                    <p class="text-xl font-bold text-indigo-500">${formatCurrency(totalReceived)}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="stat-card rounded-2xl p-6">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-yellow-500/20 flex items-center justify-center">
+                                    <i class="fas fa-clock text-yellow-500 text-xl"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-[var(--text-secondary)]">Total Pendente</p>
+                                    <p class="text-xl font-bold text-yellow-500">${formatCurrency(totalPending)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="stat-card rounded-2xl p-6">
+                            <h3 class="text-lg font-bold mb-4">Fluxo de Caixa Anual</h3>
+                            <div class="h-80">
+                                <canvas id="annualFlowChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="stat-card rounded-2xl p-6">
+                            <h3 class="text-lg font-bold mb-4">Comparativo por Categoria</h3>
+                            <div class="h-80">
+                                <canvas id="categoryCompareChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category Summary Table -->
+                    <div class="stat-card rounded-2xl p-6">
+                        <h3 class="text-lg font-bold mb-4">Resumo por Categoria (Este Mês)</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="border-b border-[var(--border-color)]">
+                                        <th class="text-left py-3 px-4 text-sm text-[var(--text-secondary)]">Categoria</th>
+                                        <th class="text-right py-3 px-4 text-sm text-[var(--text-secondary)]">A Pagar</th>
+                                        <th class="text-right py-3 px-4 text-sm text-[var(--text-secondary)]">A Receber</th>
+                                        <th class="text-right py-3 px-4 text-sm text-[var(--text-secondary)]">Saldo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${renderCategorySummary(monthAccounts)}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderCategorySummary(accounts) {
+            const summary = {};
+
+            DB.categories.forEach(cat => {
+                summary[cat.id] = { name: cat.name, color: cat.color, pagar: 0, receber: 0 };
+            });
+
+            accounts.forEach(a => {
+                if (summary[a.categoryId]) {
+                    summary[a.categoryId][a.type] += a.value;
+                }
+            });
+
+            return Object.values(summary)
+                .filter(s => s.pagar > 0 || s.receber > 0)
+                .map(s => `
+                    <tr class="border-b border-[var(--border-color)]">
+                        <td class="py-3 px-4">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full" style="background: ${s.color}"></div>
+                                <span>${s.name}</span>
+                            </div>
+                        </td>
+                        <td class="text-right py-3 px-4 text-red-500">${formatCurrency(s.pagar)}</td>
+                        <td class="text-right py-3 px-4 text-green-500">${formatCurrency(s.receber)}</td>
+                        <td class="text-right py-3 px-4 font-bold ${s.receber - s.pagar >= 0 ? 'text-green-500' : 'text-red-500'}">
+                            ${formatCurrency(s.receber - s.pagar)}
+                        </td>
+                    </tr>
+                `).join('') || '<tr><td colspan="4" class="text-center py-8 text-[var(--text-secondary)]">Nenhum dado disponível</td></tr>';
+        }
+
+        function initReportCharts() {
+            const today = new Date();
+            const months = [];
+            const payableData = [];
+            const receivableData = [];
+            const balanceData = [];
+
+            for (let i = 11; i >= 0; i--) {
+                const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                months.push(date.toLocaleDateString('pt-BR', { month: 'short' }));
+
+                const monthAccounts = DB.accounts.filter(a => {
+                    const dueDate = new Date(a.dueDate);
+                    return dueDate.getMonth() === date.getMonth() && dueDate.getFullYear() === date.getFullYear();
+                });
+
+                const pay = monthAccounts.filter(a => a.type === 'pagar').reduce((s, a) => s + a.value, 0);
+                const rec = monthAccounts.filter(a => a.type === 'receber').reduce((s, a) => s + a.value, 0);
+                
+                payableData.push(pay);
+                receivableData.push(rec);
+                balanceData.push(rec - pay);
+            }
+
+            // Annual Flow Chart
+            const flowCtx = document.getElementById('annualFlowChart')?.getContext('2d');
+            if (flowCtx) {
+                charts.annualFlow = new Chart(flowCtx, {
+                    type: 'line',
+                    data: {
+                        labels: months,
+                        datasets: [
+                            {
+                                label: 'A Pagar',
+                                data: payableData,
+                                borderColor: '#ef4444',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'A Receber',
+                                data: receivableData,
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Saldo',
+                                data: balanceData,
+                                borderColor: '#6366f1',
+                                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') }
+                            }
+                        },
+                        scales: {
+                            x: { 
+                                grid: { display: false },
+                                ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary') }
+                            },
+                            y: { 
+                                grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                                ticks: { 
+                                    color: getComputedStyle(document.body).getPropertyValue('--text-secondary'),
+                                    callback: value => formatCurrency(value)
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Category Compare Chart
+            const categories = DB.categories.filter(c => c.type === 'pagar').slice(0, 6);
+            const catData = categories.map(cat => {
+                return DB.accounts
+                    .filter(a => a.categoryId === cat.id)
+                    .reduce((s, a) => s + a.value, 0);
+            });
+
+            const catCtx = document.getElementById('categoryCompareChart')?.getContext('2d');
+            if (catCtx) {
+                charts.categoryCompare = new Chart(catCtx, {
+                    type: 'polarArea',
+                    data: {
+                        labels: categories.map(c => c.name),
+                        datasets: [{
+                            data: catData,
+                            backgroundColor: categories.map(c => c.color + '80'),
+                            borderColor: categories.map(c => c.color),
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { 
+                                    color: getComputedStyle(document.body).getPropertyValue('--text-primary'),
+                                    usePointStyle: true
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        function exportToPDF() {
+            showToast('Gerando relatório PDF...', 'info');
+            // Simulate PDF generation
+            setTimeout(() => {
+                const report = generateReportData();
+                const blob = new Blob([report], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'relatorio-financeiro.txt';
+                a.click();
+                showToast('Relatório exportado com sucesso!', 'success');
+            }, 1000);
+        }
+
+        function exportToExcel() {
+            showToast('Gerando planilha Excel...', 'info');
+            // Generate CSV
+            setTimeout(() => {
+                let csv = 'Título,Tipo,Categoria,Valor,Vencimento,Status,Forma Pagamento\n';
+                DB.accounts.forEach(a => {
+                    const cat = DB.categories.find(c => c.id === a.categoryId);
+                    csv += `"${a.title}","${a.type === 'pagar' ? 'A Pagar' : 'A Receber'}","${cat?.name || ''}",${a.value},"${formatDate(a.dueDate)}","${a.status}","${getPaymentMethodLabel(a.paymentMethod)}"\n`;
+                });
+                
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'contas-financeiras.csv';
+                a.click();
+                showToast('Planilha exportada com sucesso!', 'success');
+            }, 1000);
+        }
+
+        function generateReportData() {
+            const today = new Date();
+            let report = `RELATÓRIO FINANCEIRO\n`;
+            report += `Gerado em: ${today.toLocaleDateString('pt-BR')} ${today.toLocaleTimeString('pt-BR')}\n\n`;
+            report += `${'='.repeat(50)}\n\n`;
+            
+            const totalPayable = DB.accounts.filter(a => a.type === 'pagar').reduce((s, a) => s + a.value, 0);
+            const totalReceivable = DB.accounts.filter(a => a.type === 'receber').reduce((s, a) => s + a.value, 0);
+            
+            report += `RESUMO GERAL\n`;
+            report += `Total a Pagar: ${formatCurrency(totalPayable)}\n`;
+            report += `Total a Receber: ${formatCurrency(totalReceivable)}\n`;
+            report += `Saldo: ${formatCurrency(totalReceivable - totalPayable)}\n\n`;
+            
+            report += `${'='.repeat(50)}\n\n`;
+            report += `LISTA DE CONTAS\n\n`;
+            
+            DB.accounts.forEach(a => {
+                const cat = DB.categories.find(c => c.id === a.categoryId);
+                report += `${a.title}\n`;
+                report += `  Tipo: ${a.type === 'pagar' ? 'A Pagar' : 'A Receber'}\n`;
+                report += `  Categoria: ${cat?.name || 'N/A'}\n`;
+                report += `  Valor: ${formatCurrency(a.value)}\n`;
+                report += `  Vencimento: ${formatDate(a.dueDate)}\n`;
+                report += `  Status: ${a.status}\n\n`;
+            });
+            
+            return report;
+        }
+
+        // ============================================
+        // CATEGORIES
+        // ============================================
+        function renderCategories() {
+            const payableCategories = DB.categories.filter(c => c.type === 'pagar');
+            const receivableCategories = DB.categories.filter(c => c.type === 'receber');
+
+            return `
+                <div class="space-y-6 animate-fade-in">
+                    <button onclick="openCategoryModal()" class="btn-primary px-6 py-3 rounded-xl text-white flex items-center gap-2">
+                        <i class="fas fa-plus"></i>
+                        Nova Categoria
+                    </button>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Payable Categories -->
+                        <div class="stat-card rounded-2xl p-6">
+                            <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                                <i class="fas fa-arrow-down text-red-500"></i>
+                                Categorias de Despesas
+                            </h3>
+                            <div class="space-y-3">
+                                ${payableCategories.map(cat => renderCategoryItem(cat)).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Receivable Categories -->
+                        <div class="stat-card rounded-2xl p-6">
+                            <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                                <i class="fas fa-arrow-up text-green-500"></i>
+                                Categorias de Receitas
+                            </h3>
+                            <div class="space-y-3">
+                                ${receivableCategories.map(cat => renderCategoryItem(cat)).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderCategoryItem(cat) {
+            return `
+                <div class="table-row rounded-xl p-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: ${cat.color}20">
+                            <div class="w-4 h-4 rounded-full" style="background: ${cat.color}"></div>
+                        </div>
+                        <span class="font-medium">${cat.name}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="editCategory('${cat.id}')" class="p-2 rounded-lg bg-indigo-500/20 text-indigo-500 hover:bg-indigo-500/30">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="deleteCategory('${cat.id}')" class="p-2 rounded-lg bg-red-500/20 text-red-500 hover:bg-red-500/30">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // SETTINGS
+        // ============================================
+        function renderSettings() {
+            return `
+                <div class="space-y-6 animate-fade-in max-w-2xl">
+                    <!-- Profile Section -->
+                    <div class="stat-card rounded-2xl p-6">
+                        <h3 class="text-lg font-bold mb-6">Perfil do Usuário</h3>
+                        <form onsubmit="saveProfile(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-sm text-[var(--text-secondary)] mb-2">Nome</label>
+                                <input type="text" id="profileName" value="${DB.currentUser?.name || ''}" 
+                                    class="input-field w-full px-4 py-3 rounded-xl">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-[var(--text-secondary)] mb-2">Email</label>
+                                <input type="email" id="profileEmail" value="${DB.currentUser?.email || ''}" 
+                                    class="input-field w-full px-4 py-3 rounded-xl">
+                            </div>
+                            <button type="submit" class="btn-primary px-6 py-3 rounded-xl text-white">
+                                Salvar Alterações
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Appearance Section -->
+                    <div class="stat-card rounded-2xl p-6">
+                        <h3 class="text-lg font-bold mb-6">Aparência</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium">Tema Escuro</p>
+                                    <p class="text-sm text-[var(--text-secondary)]">Alterne entre tema claro e escuro</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="themeToggle" class="sr-only peer" 
+                                        ${DB.settings.theme === 'dark' ? 'checked' : ''} onchange="toggleTheme()">
+                                    <div class="w-14 h-7 bg-gray-600 peer-focus:ring-2 peer-focus:ring-indigo-500 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600"></div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Notifications Section -->
+                    <div class="stat-card rounded-2xl p-6">
+                        <h3 class="text-lg font-bold mb-6">Notificações</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium">Alertas de Vencimento</p>
+                                    <p class="text-sm text-[var(--text-secondary)]">Receba alertas antes do vencimento</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" class="sr-only peer" 
+                                        ${DB.settings.notifications ? 'checked' : ''} onchange="toggleNotifications()">
+                                    <div class="w-14 h-7 bg-gray-600 peer-focus:ring-2 peer-focus:ring-indigo-500 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600"></div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Section -->
+                    <div class="stat-card rounded-2xl p-6">
+                        <h3 class="text-lg font-bold mb-6">Dados</h3>
+                        <div class="space-y-4">
+                            <button onclick="exportAllData()" class="w-full px-6 py-3 rounded-xl border border-[var(--border-color)] flex items-center justify-center gap-2 hover:bg-[var(--bg-tertiary)] transition-colors">
+                                <i class="fas fa-download"></i>
+                                Exportar Todos os Dados
+                            </button>
+                            <button onclick="confirmClearData()" class="w-full px-6 py-3 rounded-xl bg-red-500/20 text-red-500 flex items-center justify-center gap-2 hover:bg-red-500/30 transition-colors">
+                                <i class="fas fa-trash"></i>
+                                Limpar Todos os Dados
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function saveProfile(e) {
+            e.preventDefault();
+            DB.currentUser.name = document.getElementById('profileName').value;
+            DB.currentUser.email = document.getElementById('profileEmail').value;
+            saveData();
+            updateUserDisplay();
+            showToast('Perfil atualizado com sucesso!', 'success');
+        }
+
+        function toggleNotifications() {
+            DB.settings.notifications = !DB.settings.notifications;
+            saveData();
+            showToast(`Notificações ${DB.settings.notifications ? 'ativadas' : 'desativadas'}`, 'success');
+        }
+
+        function exportAllData() {
+            const data = JSON.stringify(DB, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'financeflow-backup.json';
+            a.click();
+            showToast('Backup exportado com sucesso!', 'success');
+        }
+
+        function confirmClearData() {
+            openConfirmModal('Limpar Dados', 'Tem certeza que deseja apagar todos os dados? Esta ação não pode ser desfeita.', () => {
+                localStorage.removeItem('financeFlowDB');
+                location.reload();
+            });
+        }
+
+        // ============================================
+        // MODALS
+        // ============================================
+        function openAddAccountModal(type = null) {
+            const modal = `
+                <div class="modal-overlay fixed inset-0 flex items-center justify-center p-4 animate-fade-in" onclick="closeModal(event)">
+                    <div class="modal-content w-full max-w-lg rounded-2xl p-6 animate-slide-in" onclick="event.stopPropagation()">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-xl font-bold">Nova Conta</h3>
+                            <button onclick="closeModal()" class="p-2 rounded-lg hover:bg-[var(--bg-tertiary)]">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <form onsubmit="saveAccount(event)" class="space-y-4">
+                            <input type="hidden" id="accountId" value="">
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <label class="flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${type === 'pagar' || !type ? 'border-red-500 bg-red-500/10' : 'border-[var(--border-color)]'}" onclick="selectAccountType('pagar')">
+                                    <input type="radio" name="accountType" value="pagar" ${type === 'pagar' || !type ? 'checked' : ''} class="hidden">
+                                    <div class="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                                        <i class="fas fa-arrow-down text-red-500"></i>
+                                    </div>
+                                    <span class="font-medium">A Pagar</span>
+                                </label>
+                                <label class="flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${type === 'receber' ? 'border-green-500 bg-green-500/10' : 'border-[var(--border-color)]'}" onclick="selectAccountType('receber')">
+                                    <input type="radio" name="accountType" value="receber" ${type === 'receber' ? 'checked' : ''} class="hidden">
+                                    <div class="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+                                        <i class="fas fa-arrow-up text-green-500"></i>
+                                    </div>
+                                    <span class="font-medium">A Receber</span>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm text-[var(--text-secondary)] mb-2">Título *</label>
+                                <input type="text" id="accountTitle" required class="input-field w-full px-4 py-3 rounded-xl" placeholder="Ex: Conta de luz">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm text-[var(--text-secondary)] mb-2">Descrição</label>
+                                <textarea id="accountDescription" class="input-field w-full px-4 py-3 rounded-xl" rows="2" placeholder="Descrição opcional"></textarea>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm text-[var(--text-secondary)] mb-2">Valor *</label>
+                                    <input type="number" id="accountValue" required step="0.01" min="0" class="input-field w-full px-4 py-3 rounded-xl" placeholder="0,00">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-[var(--text-secondary)] mb-2">Vencimento *</label>
+                                    <input type="date" id="accountDueDate" required class="input-field w-full px-4 py-3 rounded-xl">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm text-[var(--text-secondary)] mb-2">Categoria</label>
+                                    <select id="accountCategory" class="input-field w-full px-4 py-3 rounded-xl">
+                                        <option value="">Selecione...</option>
+                                        ${DB.categories.map(c => `<option value="${c.id}" data-type="${c.type}">${c.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-[var(--text-secondary)] mb-2">Forma de Pagamento</label>
+                                    <select id="accountPaymentMethod" class="input-field w-full px-4 py-3 rounded-xl">
+                                        <option value="pix">PIX</option>
+                                        <option value="cartao">Cartão</option>
+                                        <option value="boleto">Boleto</option>
+                                        <option value="dinheiro">Dinheiro</option>
+                                        <option value="transferencia">Transferência</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm text-[var(--text-secondary)] mb-2">Recorrência</label>
+                                <select id="accountRecurrence" class="input-field w-full px-4 py-3 rounded-xl">
+                                    <option value="nenhuma">Conta Única</option>
+                                    <option value="semanal">Semanal</option>
+                                    <option value="mensal">Mensal</option>
+                                    <option value="anual">Anual</option>
+                                </select>
+                            </div>
+
+                            <div class="flex gap-3 pt-4">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-6 py-3 rounded-xl border border-[var(--border-color)] hover:bg-[var(--bg-tertiary)] transition-colors">
+                                    Cancelar
+                                </button>
+                                <button type="submit" class="flex-1 btn-primary px-6 py-3 rounded-xl text-white">
+                                    Salvar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('modalContainer').innerHTML = modal;
+            document.getElementById('modalContainer').classList.remove('hidden');
+            updateCategoryOptions();
+        }
+
+        function selectAccountType(type) {
+            document.querySelectorAll('[name="accountType"]').forEach(radio => {
+                const label = radio.closest('label');
+                if (radio.value === type) {
+                    radio.checked = true;
+                    label.classList.add(type === 'pagar' ? 'border-red-500' : 'border-green-500');
+                    label.classList.add(type === 'pagar' ? 'bg-red-500/10' : 'bg-green-500/10');
+                    label.classList.remove('border-[var(--border-color)]');
+                } else {
+                    label.classList.remove('border-red-500', 'border-green-500', 'bg-red-500/10', 'bg-green-500/10');
+                    label.classList.add('border-[var(--border-color)]');
+                }
+            });
+            updateCategoryOptions();
+        }
+
+        function updateCategoryOptions() {
+            const type = document.querySelector('[name="accountType"]:checked')?.value || 'pagar';
+            const select = document.getElementById('accountCategory');
+            if (select) {
+                Array.from(select.options).forEach(opt => {
+                    if (opt.value) {
+                        opt.style.display = opt.dataset.type === type ? '' : 'none';
+                    }
+                });
+            }
+        }
+
+        function saveAccount(e) {
+            e.preventDefault();
+            
+            const id = document.getElementById('accountId').value;
+            const type = document.querySelector('[name="accountType"]:checked').value;
+            const account = {
+                id: id || generateId(),
+                type: type,
+                title: document.getElementById('accountTitle').value,
+                description: document.getElementById('accountDescription').value,
+                value: parseFloat(document.getElementById('accountValue').value),
+                dueDate: new Date(document.getElementById('accountDueDate').value).toISOString(),
+                paymentDate: null,
+                status: 'pendente',
+                categoryId: document.getElementById('accountCategory').value,
+                paymentMethod: document.getElementById('accountPaymentMethod').value,
+                recurrence: document.getElementById('accountRecurrence').value,
+                attachments: [],
+                userId: DB.currentUser.id,
+                createdAt: id ? DB.accounts.find(a => a.id === id)?.createdAt : new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            if (id) {
+                const index = DB.accounts.findIndex(a => a.id === id);
+                account.status = DB.accounts[index].status;
+                account.paymentDate = DB.accounts[index].paymentDate;
+                DB.accounts[index] = account;
+            } else {
+                DB.accounts.push(account);
+            }
+
+            saveData();
+            updateOverdueStatus();
+            closeModal();
+            renderPage(currentPage);
+            updateBadges();
+            showToast(id ? 'Conta atualizada com sucesso!' : 'Conta criada com sucesso!', 'success');
+        }
+
+        function editAccount(id) {
+            const account = DB.accounts.find(a => a.id === id);
+            if (!account) return;
+
+            openAddAccountModal(account.type);
+            
+            setTimeout(() => {
+                document.getElementById('accountId').value = account.id;
+                document.getElementById('accountTitle').value = account.title;
+                document.getElementById('accountDescription').value = account.description || '';
+                document.getElementById('accountValue').value = account.value;
+                document.getElementById('accountDueDate').value = formatDateInput(account.dueDate);
+                document.getElementById('accountCategory').value = account.categoryId || '';
+                document.getElementById('accountPaymentMethod').value = account.paymentMethod;
+                document.getElementById('accountRecurrence').value = account.recurrence;
+                selectAccountType(account.type);
+            }, 100);
+        }
+
+        function deleteAccount(id) {
+            openConfirmModal('Excluir Conta', 'Tem certeza que deseja excluir esta conta?', () => {
+                DB.accounts = DB.accounts.filter(a => a.id !== id);
+                saveData();
+                renderPage(currentPage);
+                updateBadges();
+                showToast('Conta excluída com sucesso!', 'success');
+            });
+        }
+
+        function markAsPaid(id) {
+            const account = DB.accounts.find(a => a.id === id);
+            if (!account) return;
+
+            account.status = account.type === 'pagar' ? 'pago' : 'recebido';
+            account.paymentDate = new Date().toISOString();
+            account.updatedAt = new Date().toISOString();
+            
+            saveData();
+            generateRecurringAccounts();
+            renderPage(currentPage);
+            updateBadges();
+            showToast(`Conta marcada como ${account.status}!`, 'success');
+        }
+
+        function openCategoryModal(category = null) {
+            const modal = `
+                <div class="modal-overlay fixed inset-0 flex items-center justify-center p-4 animate-fade-in" onclick="closeModal(event)">
+                    <div class="modal-content w-full max-w-md rounded-2xl p-6 animate-slide-in" onclick="event.stopPropagation()">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-xl font-bold">${category ? 'Editar' : 'Nova'} Categoria</h3>
+                            <button onclick="closeModal()" class="p-2 rounded-lg hover:bg-[var(--bg-tertiary)]">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <form onsubmit="saveCategory(event)" class="space-y-4">
+                            <input type="hidden" id="categoryId" value="${category?.id || ''}">
+                            
+                            <div>
+                                <label class="block text-sm text-[var(--text-secondary)] mb-2">Nome *</label>
+                                <input type="text" id="categoryName" required value="${category?.name || ''}" 
+                                    class="input-field w-full px-4 py-3 rounded-xl" placeholder="Nome da categoria">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm text-[var(--text-secondary)] mb-2">Tipo *</label>
+                                <select id="categoryType" class="input-field w-full px-4 py-3 rounded-xl">
+                                    <option value="pagar" ${category?.type === 'pagar' ? 'selected' : ''}>Despesa (A Pagar)</option>
+                                    <option value="receber" ${category?.type === 'receber' ? 'selected' : ''}>Receita (A Receber)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm text-[var(--text-secondary)] mb-2">Cor</label>
+                                <div class="flex items-center gap-3">
+                                    <input type="color" id="categoryColor" value="${category?.color || '#6366f1'}" 
+                                        class="w-12 h-12 rounded-xl cursor-pointer border-0">
+                                    <span class="text-sm text-[var(--text-secondary)]">Escolha uma cor para a categoria</span>
+                                </div>
+                            </div>
+
+                            <div class="flex gap-3 pt-4">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-6 py-3 rounded-xl border border-[var(--border-color)] hover:bg-[var(--bg-tertiary)] transition-colors">
+                                    Cancelar
+                                </button>
+                                <button type="submit" class="flex-1 btn-primary px-6 py-3 rounded-xl text-white">
+                                    Salvar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('modalContainer').innerHTML = modal;
+            document.getElementById('modalContainer').classList.remove('hidden');
+        }
+
+        function saveCategory(e) {
+            e.preventDefault();
+            
+            const id = document.getElementById('categoryId').value;
+            const category = {
+                id: id || generateId(),
+                name: document.getElementById('categoryName').value,
+                type: document.getElementById('categoryType').value,
+                color: document.getElementById('categoryColor').value,
+                userId: DB.currentUser.id
+            };
+
+            if (id) {
+                const index = DB.categories.findIndex(c => c.id === id);
+                DB.categories[index] = category;
+            } else {
+                DB.categories.push(category);
+            }
+
+            saveData();
+            closeModal();
+            renderPage('categories');
+            showToast(id ? 'Categoria atualizada!' : 'Categoria criada!', 'success');
+        }
+
+        function editCategory(id) {
+            const category = DB.categories.find(c => c.id === id);
+            if (category) {
+                openCategoryModal(category);
+            }
+        }
+
+        function deleteCategory(id) {
+            openConfirmModal('Excluir Categoria', 'Tem certeza que deseja excluir esta categoria? Contas vinculadas ficarão sem categoria.', () => {
+                DB.categories = DB.categories.filter(c => c.id !== id);
+                DB.accounts.forEach(a => {
+                    if (a.categoryId === id) a.categoryId = null;
+                });
+                saveData();
+                renderPage('categories');
+                showToast('Categoria excluída!', 'success');
+            });
+        }
+
+        function openConfirmModal(title, message, onConfirm) {
+            const modal = `
+                <div class="modal-overlay fixed inset-0 flex items-center justify-center p-4 animate-fade-in" onclick="closeModal(event)">
+                    <div class="modal-content w-full max-w-sm rounded-2xl p-6 animate-slide-in" onclick="event.stopPropagation()">
+                        <div class="text-center">
+                            <div class="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-exclamation-triangle text-red-500 text-2xl"></i>
+                            </div>
+                            <h3 class="text-xl font-bold mb-2">${title}</h3>
+                            <p class="text-[var(--text-secondary)] mb-6">${message}</p>
+                            <div class="flex gap-3">
+                                <button onclick="closeModal()" class="flex-1 px-6 py-3 rounded-xl border border-[var(--border-color)] hover:bg-[var(--bg-tertiary)] transition-colors">
+                                    Cancelar
+                                </button>
+                                <button onclick="window.confirmAction()" class="flex-1 px-6 py-3 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors">
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            window.confirmAction = () => {
+                closeModal();
+                onConfirm();
+            };
+            
+            document.getElementById('modalContainer').innerHTML = modal;
+            document.getElementById('modalContainer').classList.remove('hidden');
+        }
+
+        function closeModal(e) {
+            if (!e || e.target === e.currentTarget) {
+                document.getElementById('modalContainer').classList.add('hidden');
+                document.getElementById('modalContainer').innerHTML = '';
+            }
+        }
+
+        // ============================================
+        // NOTIFICATIONS
+        // ============================================
+        function showNotifications() {
+            const panel = document.getElementById('notificationsPanel');
+            panel.classList.remove('translate-x-full');
+            loadNotifications();
+        }
+
+        function hideNotifications() {
+            const panel = document.getElementById('notificationsPanel');
+            panel.classList.add('translate-x-full');
+        }
+
+        function loadNotifications() {
+            const notifications = [];
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            DB.accounts.forEach(account => {
+                const dueDate = new Date(account.dueDate);
+                dueDate.setHours(0, 0, 0, 0);
+                const diffDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+
+                if (account.status === 'atrasado') {
+                    notifications.push({
+                        type: 'danger',
+                        icon: 'fa-exclamation-circle',
+                        title: 'Conta Atrasada',
+                        message: `${account.title} - ${formatCurrency(account.value)}`,
+                        time: `Venceu ${formatDate(account.dueDate)}`
+                    });
+                } else if (account.status === 'pendente' && diffDays >= 0 && diffDays <= 3) {
+                    notifications.push({
+                        type: 'warning',
+                        icon: 'fa-clock',
+                        title: diffDays === 0 ? 'Vence Hoje' : `Vence em ${diffDays} dia${diffDays > 1 ? 's' : ''}`,
+                        message: `${account.title} - ${formatCurrency(account.value)}`,
+                        time: formatDate(account.dueDate)
+                    });
+                }
+            });
+
+            const list = document.getElementById('notificationsList');
+            if (notifications.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center py-8">
+                        <i class="fas fa-bell-slash text-4xl text-[var(--text-secondary)] mb-4"></i>
+                        <p class="text-[var(--text-secondary)]">Nenhuma notificação</p>
+                    </div>
+                `;
+            } else {
+                list.innerHTML = notifications.map(n => `
+                    <div class="p-4 rounded-xl bg-[var(--bg-tertiary)]">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-full ${n.type === 'danger' ? 'bg-red-500/20' : 'bg-yellow-500/20'} flex items-center justify-center flex-shrink-0">
+                                <i class="fas ${n.icon} ${n.type === 'danger' ? 'text-red-500' : 'text-yellow-500'}"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-medium">${n.title}</p>
+                                <p class="text-sm text-[var(--text-secondary)] truncate">${n.message}</p>
+                                <p class="text-xs text-[var(--text-secondary)] mt-1">${n.time}</p>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function updateBadges() {
+            const overdueCount = DB.accounts.filter(a => a.status === 'atrasado').length;
+            const upcomingCount = DB.accounts.filter(a => {
+                if (a.status !== 'pendente') return false;
+                const dueDate = new Date(a.dueDate);
+                const today = new Date();
+                const diffDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+                return diffDays >= 0 && diffDays <= 3;
+            }).length;
+
+            const totalAlerts = overdueCount + upcomingCount;
+
+            // Notification badge
+            const notifBadge = document.getElementById('notificationBadge');
+            if (totalAlerts > 0) {
+                notifBadge.textContent = totalAlerts;
+                notifBadge.classList.remove('hidden');
+            } else {
+                notifBadge.classList.add('hidden');
+            }
+
+            // Payables badge
+            const payablesBadge = document.getElementById('payablesBadge');
+            const payablesOverdue = DB.accounts.filter(a => a.type === 'pagar' && a.status === 'atrasado').length;
+            if (payablesOverdue > 0) {
+                payablesBadge.textContent = payablesOverdue;
+                payablesBadge.classList.remove('hidden');
+            } else {
+                payablesBadge.classList.add('hidden');
+            }
+        }
+
+        // ============================================
+        // THEME
+        // ============================================
+        function toggleTheme() {
+            const body = document.body;
+            const icon = document.getElementById('themeIcon');
+            const toggle = document.getElementById('themeToggle');
+            
+            if (body.classList.contains('dark')) {
+                body.classList.remove('dark');
+                body.classList.add('light');
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+                DB.settings.theme = 'light';
+            } else {
+                body.classList.remove('light');
+                body.classList.add('dark');
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+                DB.settings.theme = 'dark';
+            }
+            
+            if (toggle) toggle.checked = DB.settings.theme === 'dark';
+            saveData();
+            
+            // Recreate charts with new colors
+            if (currentPage === 'dashboard') {
+                Object.values(charts).forEach(c => c.destroy());
+                charts = {};
+                initDashboardCharts();
+            } else if (currentPage === 'reports') {
+                Object.values(charts).forEach(c => c.destroy());
+                charts = {};
+                initReportCharts();
+            }
+        }
+
+        function applyTheme() {
+            const body = document.body;
+            const icon = document.getElementById('themeIcon');
+            
+            if (DB.settings.theme === 'light') {
+                body.classList.remove('dark');
+                body.classList.add('light');
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            } else {
+                body.classList.remove('light');
+                body.classList.add('dark');
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+            }
+        }
+
+        // ============================================
+        // MOBILE
+        // ============================================
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobileOverlay');
+            
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('hidden');
+        }
+
+        // ============================================
+        // GLOBAL SEARCH
+        // ============================================
+        function handleGlobalSearch(e) {
+            if (e.key === 'Enter') {
+                const query = e.target.value.toLowerCase();
+                if (query) {
+                    const results = DB.accounts.filter(a => 
+                        a.title.toLowerCase().includes(query) || 
+                        a.description?.toLowerCase().includes(query)
+                    );
+                    
+                    if (results.length > 0) {
+                        const firstResult = results[0];
+                        navigateTo(firstResult.type === 'pagar' ? 'payables' : 'receivables');
+                        setTimeout(() => {
+                            const searchInput = document.getElementById('searchInput');
+                            if (searchInput) {
+                                searchInput.value = query;
+                                filterAccounts(firstResult.type);
+                            }
+                        }, 100);
+                    } else {
+                        showToast('Nenhum resultado encontrado', 'info');
+                    }
+                }
+            }
+        }
+
+        // ============================================
+        // USER DISPLAY
+        // ============================================
+        function updateUserDisplay() {
+            if (DB.currentUser) {
+                document.getElementById('userName').textContent = DB.currentUser.name;
+                document.getElementById('userEmail').textContent = DB.currentUser.email;
+                document.getElementById('userInitials').textContent = DB.currentUser.name.charAt(0).toUpperCase();
+            }
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        function init() {
+            initializeData();
+            applyTheme();
+            updateUserDisplay();
+            updateBadges();
+            
+            // Setup navigation
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    navigateTo(item.dataset.page);
+                });
+            });
+
+            // Initial page load
+            navigateTo('dashboard');
+        }
+
+        // Start the app
+        init();
+    </script>
+</body>
+</html>
