@@ -1,0 +1,3797 @@
+<!doctype html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sistema de Gestão Pessoal</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --card: rgba(255,255,255,.75); --card2: rgba(255,255,255,.55); --stroke: rgba(15,23,42,.12); --soft: rgba(15,23,42,.06); --shadow: 0 12px 30px rgba(2,6,23,.08); }
+    .dark:root, .dark { --card: rgba(15,23,42,.55); --card2: rgba(15,23,42,.35); --stroke: rgba(148,163,184,.16); --soft: rgba(148,163,184,.08); --shadow: 0 18px 38px rgba(0,0,0,.32); }
+    html, body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
+    .glass { background: var(--card); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--stroke); box-shadow: var(--shadow); }
+    .glass2 { background: var(--card2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--stroke); }
+    .soft-border { border: 1px solid var(--stroke); }
+    .soft-bg { background: var(--soft); }
+    .no-scrollbar::-webkit-scrollbar { width: 0; height: 0; }
+    .mini-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+    .mini-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.35); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+    .mini-scroll::-webkit-scrollbar-track { background: transparent; }
+    .fade-in { animation: fadeIn .18s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+    .pop { animation: pop .16s ease-out; }
+    @keyframes pop { from { transform: scale(.98); opacity: .6; } to { transform: scale(1); opacity: 1; } }
+    .kbd { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+    .drag-over { outline: 2px dashed rgba(99,102,241,.6); outline-offset: 6px; }
+    .prose-lite h1, .prose-lite h2, .prose-lite h3 { font-weight: 700; }
+    .prose-lite a { color: rgb(79,70,229); text-decoration: underline; }
+    .prose-lite ul { list-style: disc; padding-left: 1.25rem; }
+    .prose-lite ol { list-style: decimal; padding-left: 1.25rem; }
+  </style>
+</head>
+<body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-indigo-50 text-slate-900 dark:from-slate-950 dark:via-slate-950 dark:to-indigo-950 dark:text-slate-100">
+  <div id="app" class="h-full"></div>
+
+  <template id="tplIcon">
+    <!-- Placeholder -->
+  </template>
+
+  <script>
+    // =========================
+    // Personal Gestão — SPA local-first
+    // =========================
+
+    const $ = (sel, el = document) => el.querySelector(sel);
+    const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+
+    const fmt = {
+      money(v) {
+        const n = Number(v || 0);
+        return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      },
+      dateISO(d) {
+        const x = new Date(d);
+        const z = (n) => String(n).padStart(2,'0');
+        return `${x.getFullYear()}-${z(x.getMonth()+1)}-${z(x.getDate())}`;
+      },
+      dateHuman(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        return d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
+      },
+      datetimeHuman(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        return d.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      },
+      monthKey(d) {
+        const x = new Date(d);
+        const z = (n) => String(n).padStart(2,'0');
+        return `${x.getFullYear()}-${z(x.getMonth()+1)}`;
+      }
+    };
+
+    const uid = () => Math.random().toString(16).slice(2) + '-' + Date.now().toString(16);
+
+    const storage = {
+      get(key, fallback) {
+        try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+      },
+      set(key, value) {
+        localStorage.setItem(key, JSON.stringify(value));
+      },
+      del(key) { localStorage.removeItem(key); }
+    };
+
+    const KEYS = {
+      users: 'pgp_users_v1',
+      session: 'pgp_session_v1',
+      theme: 'pgp_theme_v1'
+    };
+
+    async function sha256(text) {
+      const enc = new TextEncoder().encode(text);
+      const buf = await crypto.subtle.digest('SHA-256', enc);
+      return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+
+    function nowISO() { return new Date().toISOString(); }
+
+    function startOfDay(d = new Date()) {
+      const x = new Date(d);
+      x.setHours(0,0,0,0);
+      return x;
+    }
+
+    function addDays(d, n) {
+      const x = new Date(d);
+      x.setDate(x.getDate() + n);
+      return x;
+    }
+
+    function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+
+    function motivationalPhrase() {
+      const phrases = [
+        'Progresso > perfeição. Faça o próximo passo.',
+        'Pequenas ações diárias criam grandes resultados.',
+        'Foco no que importa. O resto é ruído.',
+        'Consistência é a sua superpotência.',
+        'Você não precisa de mais tempo — precisa de clareza.',
+        'Hoje é um bom dia para simplificar.',
+        'Disciplina é liberdade em forma de hábito.'
+      ];
+      const idx = (new Date().getDay() + new Date().getWeek?.() || 0) % phrases.length;
+      return phrases[idx];
+    }
+
+    // Polyfill for week index
+    Date.prototype.getWeek = function() {
+      const d = new Date(Date.UTC(this.getFullYear(), this.getMonth(), this.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+      return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    };
+
+    // -------------------------
+    // Data model
+    // -------------------------
+    function defaultData() {
+      const today = fmt.dateISO(new Date());
+      const in3 = fmt.dateISO(addDays(new Date(), 3));
+      const in10 = fmt.dateISO(addDays(new Date(), 10));
+      return {
+        meta: { createdAt: nowISO(), updatedAt: nowISO(), budgetMonth: 2500 },
+        tasks: [
+          { id: uid(), title: 'Planejar a semana (30 min)', desc: '', category: 'estudos', priority: 'média', tags: ['planejamento'], dueDate: today, reminderAt: '', list: 'Semana', status: 'todo', project: 'Vida', createdAt: nowISO(), updatedAt: nowISO() },
+          { id: uid(), title: 'Treino leve + alongamento', desc: 'Caminhada 20 min', category: 'saúde', priority: 'baixa', tags: ['bem-estar'], dueDate: today, reminderAt: '', list: 'Hoje', status: 'todo', project: 'Saúde', createdAt: nowISO(), updatedAt: nowISO() },
+          { id: uid(), title: 'Revisar finanças do mês', desc: '', category: 'finanças', priority: 'alta', tags: ['orçamento'], dueDate: in3, reminderAt: '', list: 'Pendências', status: 'todo', project: 'Financeiro', createdAt: nowISO(), updatedAt: nowISO() },
+        ],
+        habits: [
+          { id: uid(), name: 'Beber água', frequency: { type: 'diária', daysOfWeek: [1,2,3,4,5,6,0] }, time: '09:00', difficulty: 2, history: [], createdAt: nowISO(), updatedAt: nowISO(), xp: 0, level: 1 },
+          { id: uid(), name: 'Leitura 10 páginas', frequency: { type: 'dias_específicos', daysOfWeek: [1,3,5] }, time: '21:00', difficulty: 3, history: [], createdAt: nowISO(), updatedAt: nowISO(), xp: 0, level: 1 },
+        ],
+        goals: [
+          { id: uid(), title: 'Certificação em 60 dias', category: 'estudos', deadline: in10, milestones: [ { id: uid(), title: 'Definir trilha', done: true }, { id: uid(), title: 'Estudar 10h', done: false } ], progressMode: 'manual', progress: 35, linkedTaskIds: [], createdAt: nowISO(), updatedAt: nowISO() },
+        ],
+        events: [
+          { id: uid(), title: 'Consulta', startAt: new Date(new Date().setHours(16,0,0,0)).toISOString(), endAt: new Date(new Date().setHours(16,45,0,0)).toISOString(), location: 'Clínica', desc: 'Levar exames', reminderMin: 30, createdAt: nowISO(), updatedAt: nowISO() }
+        ],
+        transactions: [
+          { id: uid(), type: 'income', amount: 5200, category: 'salário', date: today, note: 'Receita', createdAt: nowISO() },
+          { id: uid(), type: 'expense', amount: 92.5, category: 'alimentação', date: today, note: 'Mercado', createdAt: nowISO() },
+          { id: uid(), type: 'expense', amount: 48, category: 'transporte', date: in3, note: 'Aplicativo', createdAt: nowISO() },
+        ],
+        notes: [
+          { id: uid(), title: 'Ideias rápidas', tags: ['inbox'], contentHtml: '<p>Use esta área para capturar ideias e organizar depois.</p>', createdAt: nowISO(), updatedAt: nowISO() }
+        ],
+        diary: [
+          { id: uid(), date: today, mood: '🙂', weather: '☀️', contentHtml: '<p>Um dia produtivo. Foquei no essencial.</p>', attachments: [], createdAt: nowISO(), updatedAt: nowISO() }
+        ],
+        health: {
+          logs: [
+            { id: uid(), date: today, waterMl: 1500, sleepH: 7.2, weightKg: 0, exerciseMin: 20, mood: 4, createdAt: nowISO() }
+          ]
+        },
+        ui: { tasksView: 'listas', tasksListTab: 'Hoje', calendarView: 'mês', notesTab: 'notas' }
+      };
+    }
+
+    function getUserDataKey(userId) { return `pgp_data_v1_${userId}`; }
+
+    function loadDataFor(userId) {
+      const key = getUserDataKey(userId);
+      const data = storage.get(key, null);
+      if (data) return data;
+      const d = defaultData();
+      storage.set(key, d);
+      return d;
+    }
+
+    function saveDataFor(userId, data) {
+      data.meta.updatedAt = nowISO();
+      storage.set(getUserDataKey(userId), data);
+    }
+
+    function getSession() { return storage.get(KEYS.session, null); }
+    function setSession(sess) { storage.set(KEYS.session, sess); }
+    function clearSession() { storage.del(KEYS.session); }
+
+    function getUsers() { return storage.get(KEYS.users, []); }
+    function setUsers(users) { storage.set(KEYS.users, users); }
+
+    // -------------------------
+    // UI building blocks
+    // -------------------------
+    const Icons = {
+      home: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 21.5V14a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v7.5" stroke="currentColor" stroke-width="1.6"/></svg>`,
+      check: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m5 12 4 4 10-10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      list: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+      grid: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z" stroke="currentColor" stroke-width="1.6"/></svg>`,
+      flame: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 22c4 0 7-3 7-7 0-2.2-1.1-4.2-2.6-5.6-1-.9-1.7-2.1-1.7-3.4V4.8c-1 .6-2.1 1.7-2.9 3.2-.4.7-1.4.6-1.7-.1-.6-1.5-1.6-3-3.1-4.2C6 6.5 4.5 9 4.5 12.5 4.5 18 8 22 12 22Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      target: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z" stroke="currentColor" stroke-width="1.6"/><path d="M12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z" stroke="currentColor" stroke-width="1.6"/><path d="M12 12l7-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+      calendar: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 3v3M17 3v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M4.5 8.5h15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M6.5 5.5h11A2.5 2.5 0 0 1 20 8v11.5A2.5 2.5 0 0 1 17.5 22h-11A2.5 2.5 0 0 1 4 19.5V8A2.5 2.5 0 0 1 6.5 5.5Z" stroke="currentColor" stroke-width="1.6"/></svg>`,
+      money: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 7.5h16A2 2 0 0 1 22 9.5v9A2 2 0 0 1 20 20.5H4A2 2 0 0 1 2 18.5v-9A2 2 0 0 1 4 7.5Z" stroke="currentColor" stroke-width="1.6"/><path d="M6 7.5V6a2.5 2.5 0 0 1 2.5-2.5h7A2.5 2.5 0 0 1 18 6v1.5" stroke="currentColor" stroke-width="1.6"/><path d="M12 17.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.6"/></svg>`,
+      note: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 3.5h7l3 3V20a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3.5V7a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+      heart: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21s-7-4.6-9.2-9.1C1 8.4 3.3 5.5 6.5 5.5c2 0 3.3 1.1 3.9 2 0.6-.9 1.9-2 3.9-2 3.2 0 5.5 2.9 3.7 6.4C19 16.4 12 21 12 21Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+      settings: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 15a8.4 8.4 0 0 0 .1-2l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1L15 5h-6l-.4 2.9a8 8 0 0 0-1.7 1L4.5 8l-2 3.5 2 1.5a8.4 8.4 0 0 0 .1 2l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1L9 23h6l.4-2.9a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+      plus: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+      search: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" stroke="currentColor" stroke-width="1.6"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+      bell: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 7H3s3 0 3-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 19a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+      download: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m8 10 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v3a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 20v-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+      upload: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21V11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m8 14 4-4 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 7V4a1.5 1.5 0 0 1 1.5-1.5h13A1.5 1.5 0 0 1 20 4v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+      logout: (cls='w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 7V6a2.5 2.5 0 0 1 2.5-2.5h5A2.5 2.5 0 0 1 20 6v12a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 10 18v-1" stroke="currentColor" stroke-width="1.6"/><path d="M4 12h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="m7 9-3 3 3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    };
+
+    function badgePriority(p) {
+      const map = {
+        'baixa': 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
+        'média': 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
+        'alta': 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20'
+      };
+      return map[p] || 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20';
+    }
+
+    function badgeCategory(c) {
+      const map = {
+        trabalho: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20',
+        estudos: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/20',
+        'saúde': 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
+        família: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/20',
+        espiritual: 'bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-500/20',
+        finanças: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
+        outros: 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20'
+      };
+      return map[c] || map.outros;
+    }
+
+    function toast(msg, type='info') {
+      const root = $('#toastRoot') || (() => {
+        const el = document.createElement('div');
+        el.id = 'toastRoot';
+        el.className = 'fixed z-[70] bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 space-y-2 w-[min(560px,92vw)]';
+        document.body.appendChild(el);
+        return el;
+      })();
+
+      const color = {
+        info: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900',
+        ok: 'bg-emerald-600 text-white',
+        warn: 'bg-amber-600 text-white',
+        err: 'bg-rose-600 text-white'
+      }[type] || 'bg-slate-900 text-white';
+
+      const t = document.createElement('div');
+      t.className = `${color} pop rounded-2xl px-4 py-3 shadow-lg flex items-start justify-between gap-3`;
+      t.innerHTML = `
+        <div class="text-sm leading-relaxed">${msg}</div>
+        <button class="opacity-80 hover:opacity-100" aria-label="Fechar">✕</button>
+      `;
+      root.appendChild(t);
+      const btn = $('button', t);
+      const remove = () => { t.style.opacity = '0'; t.style.transform = 'translateY(6px)'; setTimeout(()=>t.remove(), 160); };
+      btn.addEventListener('click', remove);
+      setTimeout(remove, 3600);
+    }
+
+    function openModal({ title, bodyHtml, primaryText='Salvar', secondaryText='Cancelar', onPrimary, onSecondary, wide=false }) {
+      const wrap = document.createElement('div');
+      wrap.className = 'fixed inset-0 z-[60] flex items-end md:items-center justify-center p-3 md:p-6';
+      wrap.innerHTML = `
+        <div class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="relative glass rounded-3xl w-full ${wide ? 'max-w-4xl' : 'max-w-xl'} overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-200/60 dark:border-slate-700/50 flex items-center justify-between">
+            <div class="font-semibold">${title}</div>
+            <button class="btnClose p-2 rounded-xl hover:soft-bg" aria-label="Fechar">✕</button>
+          </div>
+          <div class="p-5 max-h-[72vh] overflow-auto mini-scroll">
+            ${bodyHtml}
+          </div>
+          <div class="px-5 py-4 border-t border-slate-200/60 dark:border-slate-700/50 flex items-center justify-end gap-2">
+            <button class="btnSecondary px-4 py-2 rounded-xl soft-border hover:soft-bg text-sm">${secondaryText}</button>
+            <button class="btnPrimary px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm">${primaryText}</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(wrap);
+
+      const close = () => wrap.remove();
+      $('.btnClose', wrap).addEventListener('click', () => { onSecondary?.(); close(); });
+      $('.btnSecondary', wrap).addEventListener('click', () => { onSecondary?.(); close(); });
+      $('.btnPrimary', wrap).addEventListener('click', async () => {
+        const res = await onPrimary?.(wrap);
+        if (res !== false) close();
+      });
+      wrap.addEventListener('click', (e) => {
+        if (e.target === wrap.firstElementChild) { onSecondary?.(); close(); }
+      });
+      return wrap;
+    }
+
+    function confirmModal({ title='Confirmar', message='Tem certeza?', danger=false, confirmText='Confirmar', cancelText='Cancelar' }) {
+      return new Promise((resolve) => {
+        openModal({
+          title,
+          bodyHtml: `<div class="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">${message}</div>`,
+          primaryText: confirmText,
+          secondaryText: cancelText,
+          onPrimary: () => resolve(true),
+          onSecondary: () => resolve(false)
+        });
+        const modal = $('.fixed.z-[60]');
+        if (danger && modal) {
+          const btn = $('.btnPrimary', modal);
+          if (btn) btn.className = 'btnPrimary px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm';
+        }
+      });
+    }
+
+    // -------------------------
+    // App state
+    // -------------------------
+    const state = {
+      user: null,
+      data: null,
+      route: 'home',
+      charts: {},
+      reminders: new Map(),
+      search: { tasks: '', notes: '' },
+      calendar: { focusMonth: new Date() }
+    };
+
+    function setTheme(theme) {
+      storage.set(KEYS.theme, theme);
+      if (theme === 'dark') document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+    }
+
+    function getTheme() { return storage.get(KEYS.theme, 'light'); }
+
+    // -------------------------
+    // Auth
+    // -------------------------
+    async function register({ name, email, password }) {
+      email = (email || '').trim().toLowerCase();
+      if (!email || !password || password.length < 6) throw new Error('Use um email válido e senha com pelo menos 6 caracteres.');
+      const users = getUsers();
+      if (users.some(u => u.email === email)) throw new Error('Este email já está cadastrado.');
+      const salt = uid();
+      const hash = await sha256(`${salt}:${password}`);
+      const user = { id: uid(), name: name?.trim() || 'Usuário', email, passHash: hash, salt, createdAt: nowISO() };
+      users.push(user);
+      setUsers(users);
+      storage.set(getUserDataKey(user.id), defaultData());
+      return user;
+    }
+
+    async function login({ email, password }) {
+      email = (email || '').trim().toLowerCase();
+      const users = getUsers();
+      const user = users.find(u => u.email === email);
+      if (!user) throw new Error('Email não encontrado.');
+      const hash = await sha256(`${user.salt}:${password}`);
+      if (hash !== user.passHash) throw new Error('Senha incorreta.');
+      return user;
+    }
+
+    function logout() {
+      clearSession();
+      state.user = null;
+      state.data = null;
+      teardownReminders();
+      render();
+      toast('Sessão encerrada.', 'ok');
+    }
+
+    // -------------------------
+    // Reminders (in-app)
+    // -------------------------
+    function teardownReminders() {
+      for (const t of state.reminders.values()) clearTimeout(t);
+      state.reminders.clear();
+    }
+
+    function scheduleReminders() {
+      teardownReminders();
+      if (!state.user || !state.data) return;
+
+      // Request notification permission lazily
+      const canNotify = 'Notification' in window;
+
+      const schedule = (id, when, title, body) => {
+        const t = new Date(when).getTime() - Date.now();
+        if (t < 10_000 || t > 24 * 60 * 60 * 1000) return; // only next 24h and >10s
+        const handle = setTimeout(() => {
+          toast(`<b>Lembrete:</b> ${title}<br><span class="opacity-80">${body || ''}</span>`, 'info');
+          if (canNotify && Notification.permission === 'granted') {
+            try { new Notification(title, { body: body || 'Lembrete do seu sistema.' }); } catch {}
+          }
+        }, t);
+        state.reminders.set(id, handle);
+      };
+
+      // Tasks reminders
+      state.data.tasks.forEach(task => {
+        if (task.reminderAt) schedule(`task-${task.id}`, task.reminderAt, `Tarefa: ${task.title}`, fmt.datetimeHuman(task.reminderAt));
+      });
+      // Events reminders
+      state.data.events.forEach(ev => {
+        if (!ev.startAt || !ev.reminderMin) return;
+        const when = new Date(new Date(ev.startAt).getTime() - ev.reminderMin * 60 * 1000).toISOString();
+        schedule(`event-${ev.id}`, when, `Evento: ${ev.title}`, `${fmt.datetimeHuman(ev.startAt)} • ${ev.location || ''}`.trim());
+      });
+    }
+
+    async function ensureNotifications() {
+      if (!('Notification' in window)) return;
+      if (Notification.permission === 'default') {
+        try {
+          const res = await Notification.requestPermission();
+          if (res === 'granted') toast('Notificações ativadas (quando o app estiver aberto).', 'ok');
+        } catch {}
+      }
+    }
+
+    // -------------------------
+    // Navigation
+    // -------------------------
+    const NAV = [
+      { key: 'home', label: 'Home', icon: 'home' },
+      { key: 'tasks', label: 'Tarefas', icon: 'list' },
+      { key: 'habits', label: 'Hábitos', icon: 'flame' },
+      { key: 'goals', label: 'Metas', icon: 'target' },
+      { key: 'calendar', label: 'Agenda', icon: 'calendar' },
+      { key: 'finance', label: 'Finanças', icon: 'money' },
+      { key: 'notes', label: 'Notas/Diário', icon: 'note' },
+      { key: 'health', label: 'Saúde', icon: 'heart' },
+      { key: 'settings', label: 'Configurações', icon: 'settings' }
+    ];
+
+    function setRoute(key) {
+      state.route = key;
+      renderView();
+      // scroll to top of content
+      const sc = $('#contentScroll');
+      if (sc) sc.scrollTop = 0;
+    }
+
+    // -------------------------
+    // Rendering shell
+    // -------------------------
+    function render() {
+      setTheme(getTheme());
+
+      const sess = getSession();
+      if (sess?.userId) {
+        const user = getUsers().find(u => u.id === sess.userId);
+        if (user) {
+          state.user = user;
+          state.data = loadDataFor(user.id);
+        } else {
+          clearSession();
+        }
+      }
+
+      const app = $('#app');
+      if (!state.user) {
+        app.innerHTML = renderAuth();
+        bindAuth();
+        return;
+      }
+
+      app.innerHTML = renderShell();
+      bindShell();
+      renderView();
+      scheduleReminders();
+    }
+
+    function renderAuth() {
+      return `
+      <div class="min-h-full flex items-center justify-center p-4">
+        <div class="w-full max-w-5xl grid md:grid-cols-2 gap-4 md:gap-6 items-stretch">
+          <div class="glass rounded-3xl p-6 md:p-8 fade-in">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-2xl bg-indigo-600 text-white grid place-items-center">${Icons.home('w-6 h-6')}</div>
+              <div>
+                <div class="text-lg font-semibold">Sistema de Gestão Pessoal</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">Produtividade, organização e monitoramento de vida — local-first.</div>
+              </div>
+            </div>
+
+            <div class="mt-6 grid gap-4">
+              <div class="glass2 rounded-2xl p-4">
+                <div class="font-semibold">Entrar</div>
+                <div class="mt-3 grid gap-3">
+                  <label class="text-xs text-slate-600 dark:text-slate-300">Email
+                    <input id="loginEmail" type="email" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500/30" placeholder="voce@email.com" />
+                  </label>
+                  <label class="text-xs text-slate-600 dark:text-slate-300">Senha
+                    <input id="loginPass" type="password" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500/30" placeholder="••••••••" />
+                  </label>
+                  <div class="flex items-center justify-between gap-2">
+                    <button id="btnLogin" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm">Entrar</button>
+                    <button id="btnNotif" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm inline-flex items-center gap-2">${Icons.bell('w-4 h-4')} Notificações</button>
+                  </div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400">Dica: seus dados ficam no seu navegador (localStorage). Use <b>Backup</b> para exportar.</div>
+                </div>
+              </div>
+
+              <div class="glass2 rounded-2xl p-4">
+                <div class="font-semibold">Criar conta</div>
+                <div class="mt-3 grid gap-3">
+                  <label class="text-xs text-slate-600 dark:text-slate-300">Nome
+                    <input id="regName" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500/30" placeholder="Seu nome" />
+                  </label>
+                  <label class="text-xs text-slate-600 dark:text-slate-300">Email
+                    <input id="regEmail" type="email" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500/30" placeholder="voce@email.com" />
+                  </label>
+                  <label class="text-xs text-slate-600 dark:text-slate-300">Senha
+                    <input id="regPass" type="password" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500/30" placeholder="mínimo 6 caracteres" />
+                  </label>
+                  <button id="btnRegister" class="px-4 py-2 rounded-xl soft-border hover:soft-bg text-sm">Criar conta</button>
+                </div>
+              </div>
+
+              <div class="glass2 rounded-2xl p-4">
+                <div class="font-semibold">Google Login</div>
+                <div class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                  OAuth do Google exige configuração de projeto/redirect. Aqui deixamos um botão de atalho <i>simulado</i> para o fluxo, mas o login real é local.
+                </div>
+                <button id="btnGoogle" class="mt-3 w-full px-4 py-2 rounded-xl bg-white/80 dark:bg-slate-900/60 soft-border hover:soft-bg text-sm flex items-center justify-center gap-2">
+                  <span class="w-4 h-4 rounded-sm bg-gradient-to-br from-red-500 via-yellow-500 to-blue-500"></span>
+                  Continuar com Google (demo)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass rounded-3xl p-6 md:p-8 fade-in">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">O que você ganha</div>
+                <div class="mt-2 text-2xl md:text-3xl font-semibold">Clareza diária e consistência semanal.</div>
+                <div class="mt-3 text-slate-600 dark:text-slate-300 text-sm leading-relaxed">Dashboard integrado com tarefas, hábitos, metas, agenda, finanças, notas e saúde — com visual moderno, mínimo e rápido.</div>
+              </div>
+              <button id="btnTheme" class="shrink-0 px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Tema</button>
+            </div>
+
+            <div class="mt-6 grid gap-3">
+              ${featureCard('Dashboard', 'Visão rápida do dia + gráficos semanais e do mês.')}
+              ${featureCard('Tarefas + Kanban', 'Listas “Hoje”, “Semana”, “Projetos”, “Pendências” com prioridades, tags e lembretes.')}
+              ${featureCard('Hábitos', 'Chain tracker, calendário e streak para manter consistência.')}
+              ${featureCard('Finanças', 'Receitas/despesas, alertas de excesso e gráficos por categoria/mês.')}
+              ${featureCard('Notas e Diário', 'Editor rich text, busca e filtros por tags e datas.')}
+              ${featureCard('Backup', 'Exportar/Importar JSON para manter seus dados seguros.')}
+            </div>
+
+            <div class="mt-6 text-xs text-slate-500 dark:text-slate-400">
+              Segurança: este app não envia dados para servidores. Para uso real multi-dispositivo, conecte a um backend.
+            </div>
+          </div>
+        </div>
+      </div>
+      `;
+    }
+
+    function featureCard(title, desc) {
+      return `
+        <div class="glass2 rounded-2xl p-4 flex items-start gap-3">
+          <div class="w-9 h-9 rounded-2xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 grid place-items-center">${Icons.check('w-5 h-5')}</div>
+          <div>
+            <div class="font-semibold">${title}</div>
+            <div class="text-sm text-slate-600 dark:text-slate-300">${desc}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function bindAuth() {
+      const btnTheme = $('#btnTheme');
+      if (btnTheme) btnTheme.addEventListener('click', () => setTheme(getTheme() === 'dark' ? 'light' : 'dark'));
+
+      const btnNotif = $('#btnNotif');
+      if (btnNotif) btnNotif.addEventListener('click', ensureNotifications);
+
+      $('#btnGoogle')?.addEventListener('click', () => {
+        toast('Demo: login Google real requer OAuth. Use cadastro/login local.', 'warn');
+      });
+
+      $('#btnRegister')?.addEventListener('click', async () => {
+        try {
+          const user = await register({ name: $('#regName').value, email: $('#regEmail').value, password: $('#regPass').value });
+          setSession({ userId: user.id, createdAt: nowISO() });
+          state.user = user;
+          state.data = loadDataFor(user.id);
+          toast('Conta criada com sucesso!', 'ok');
+          render();
+        } catch (e) {
+          toast(e.message || 'Falha ao cadastrar.', 'err');
+        }
+      });
+
+      $('#btnLogin')?.addEventListener('click', async () => {
+        try {
+          const user = await login({ email: $('#loginEmail').value, password: $('#loginPass').value });
+          setSession({ userId: user.id, createdAt: nowISO() });
+          state.user = user;
+          state.data = loadDataFor(user.id);
+          toast('Bem-vindo(a)!', 'ok');
+          render();
+        } catch (e) {
+          toast(e.message || 'Falha no login.', 'err');
+        }
+      });
+
+      $('#loginPass')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btnLogin')?.click(); });
+      $('#regPass')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btnRegister')?.click(); });
+    }
+
+    function renderShell() {
+      const userInitial = (state.user?.name || 'U').slice(0,1).toUpperCase();
+      return `
+        <div class="h-full flex">
+          <aside class="hidden md:flex w-72 p-4">
+            <div class="glass rounded-3xl w-full flex flex-col overflow-hidden">
+              <div class="p-4 border-b border-slate-200/60 dark:border-slate-700/50">
+                <div class="flex items-center gap-3">
+                  <div class="w-11 h-11 rounded-2xl bg-indigo-600 text-white grid place-items-center">${userInitial}</div>
+                  <div class="min-w-0">
+                    <div class="font-semibold truncate">${escapeHtml(state.user.name)}</div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 truncate">${escapeHtml(state.user.email)}</div>
+                  </div>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                  <button id="btnTheme" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Tema</button>
+                  <button id="btnNotif2" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm inline-flex items-center gap-2">${Icons.bell('w-4 h-4')} Alertas</button>
+                </div>
+              </div>
+              <nav class="p-2 space-y-1 overflow-auto mini-scroll">
+                ${NAV.map(item => navItem(item.key, item.label, item.icon)).join('')}
+              </nav>
+              <div class="mt-auto p-3 border-t border-slate-200/60 dark:border-slate-700/50">
+                <button id="btnLogout" class="w-full px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm flex items-center justify-center gap-2">${Icons.logout('w-4 h-4')} Sair</button>
+              </div>
+            </div>
+          </aside>
+
+          <main class="flex-1 p-3 md:p-4">
+            <div class="glass rounded-3xl h-[calc(100vh-1.5rem)] md:h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
+              <header class="px-4 md:px-6 py-4 border-b border-slate-200/60 dark:border-slate-700/50">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">${new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' })}</div>
+                    <div id="headerTitle" class="text-lg md:text-xl font-semibold">Home</div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <div class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl soft-border bg-transparent text-sm">
+                      <span class="opacity-70">${Icons.search('w-4 h-4')}</span>
+                      <input id="globalSearch" class="bg-transparent outline-none w-56" placeholder="Buscar (tarefas, notas)..." />
+                      <span class="text-xs text-slate-500 dark:text-slate-400 kbd">Ctrl K</span>
+                    </div>
+                    <button id="btnQuickAdd" class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm inline-flex items-center gap-2">${Icons.plus('w-4 h-4')} Novo</button>
+                  </div>
+                </div>
+              </header>
+
+              <div id="contentScroll" class="flex-1 overflow-auto mini-scroll">
+                <div id="view" class="p-4 md:p-6"></div>
+              </div>
+
+              <nav class="md:hidden border-t border-slate-200/60 dark:border-slate-700/50 bg-white/50 dark:bg-slate-950/30 backdrop-blur">
+                <div class="grid grid-cols-5 px-2 py-2">
+                  ${bottomNavItem('home','Home','home')}
+                  ${bottomNavItem('tasks','Tarefas','list')}
+                  ${bottomNavItem('calendar','Agenda','calendar')}
+                  ${bottomNavItem('finance','Finanças','money')}
+                  ${bottomNavItem('settings','Ajustes','settings')}
+                </div>
+              </nav>
+            </div>
+          </main>
+        </div>
+      `;
+    }
+
+    function navItem(key, label, icon) {
+      const active = state.route === key;
+      return `
+        <button data-route="${key}" class="w-full flex items-center gap-3 px-3 py-2 rounded-2xl text-sm transition ${active ? 'bg-indigo-600 text-white' : 'hover:soft-bg'}">
+          <span class="opacity-${active ? '100' : '70'}">${Icons[icon]('w-5 h-5')}</span>
+          <span class="flex-1 text-left">${label}</span>
+        </button>
+      `;
+    }
+
+    function bottomNavItem(key, label, icon) {
+      const active = state.route === key;
+      return `
+        <button data-route="${key}" class="flex flex-col items-center justify-center gap-1 py-2 rounded-2xl transition ${active ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-300'}">
+          ${Icons[icon]('w-5 h-5')}
+          <span class="text-[11px]">${label}</span>
+        </button>
+      `;
+    }
+
+    function bindShell() {
+      $('#btnTheme')?.addEventListener('click', () => {
+        setTheme(getTheme() === 'dark' ? 'light' : 'dark');
+        render();
+      });
+
+      $('#btnNotif2')?.addEventListener('click', async () => { await ensureNotifications(); scheduleReminders(); });
+
+      $('#btnLogout')?.addEventListener('click', logout);
+
+      $$('[data-route]').forEach(btn => btn.addEventListener('click', () => setRoute(btn.dataset.route)));
+
+      $('#btnQuickAdd')?.addEventListener('click', () => openQuickAdd());
+
+      const gs = $('#globalSearch');
+      if (gs) {
+        gs.value = '';
+        gs.addEventListener('input', () => {
+          const q = gs.value.trim();
+          state.search.tasks = q;
+          state.search.notes = q;
+          renderView();
+        });
+      }
+
+      window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          $('#globalSearch')?.focus();
+        }
+      });
+    }
+
+    function renderView() {
+      $('#headerTitle').textContent = NAV.find(n => n.key === state.route)?.label || 'Home';
+      const view = $('#view');
+      if (!view) return;
+
+      // destroy charts before re-render
+      destroyCharts();
+
+      const map = {
+        home: renderHome,
+        tasks: renderTasks,
+        habits: renderHabits,
+        goals: renderGoals,
+        calendar: renderCalendar,
+        finance: renderFinance,
+        notes: renderNotes,
+        health: renderHealth,
+        settings: renderSettings
+      };
+      view.innerHTML = (map[state.route] || renderHome)();
+      ( {
+        home: bindHome,
+        tasks: bindTasks,
+        habits: bindHabits,
+        goals: bindGoals,
+        calendar: bindCalendar,
+        finance: bindFinance,
+        notes: bindNotes,
+        health: bindHealth,
+        settings: bindSettings
+      }[state.route] || bindHome )();
+    }
+
+    function destroyCharts() {
+      Object.values(state.charts).forEach(ch => { try { ch.destroy(); } catch {} });
+      state.charts = {};
+    }
+
+    // -------------------------
+    // Home (Dashboard)
+    // -------------------------
+    function computeTodayOverview() {
+      const today = fmt.dateISO(new Date());
+      const tasksToday = state.data.tasks.filter(t => t.dueDate === today && t.status !== 'done');
+      const dueSoon = state.data.tasks.filter(t => t.dueDate && t.status !== 'done').sort((a,b)=> (a.dueDate||'').localeCompare(b.dueDate||'')).slice(0, 5);
+      const habitsDue = habitsDueToday().slice(0, 6);
+      const goals = [...state.data.goals].sort((a,b)=> (a.deadline||'').localeCompare(b.deadline||''));
+      const monthKey = fmt.monthKey(new Date());
+      const txMonth = state.data.transactions.filter(tx => fmt.monthKey(tx.date) === monthKey);
+      const spent = txMonth.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount||0),0);
+      const income = txMonth.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount||0),0);
+      const saved = income - spent;
+      return { today, tasksToday, dueSoon, habitsDue, goals, spent, income, saved };
+    }
+
+    function renderHome() {
+      const ov = computeTodayOverview();
+      const phrase = motivationalPhrase();
+
+      return `
+        <div class="space-y-4 md:space-y-6 fade-in">
+          <div class="grid lg:grid-cols-3 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-5 md:p-6 lg:col-span-2">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Visão rápida do dia</div>
+                  <div class="mt-1 text-xl md:text-2xl font-semibold">Olá, ${escapeHtml(state.user.name)}.</div>
+                </div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">Atualizado: ${new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}</div>
+              </div>
+
+              <div class="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                ${kpiCard('Tarefas de hoje', ov.tasksToday.length, 'Conclua o essencial', 'tasks')}
+                ${kpiCard('Hábitos hoje', ov.habitsDue.length, 'Mantenha a corrente', 'habits')}
+                ${kpiCard('Gasto do mês', fmt.money(ov.spent), `Orçamento: ${fmt.money(state.data.meta.budgetMonth || 0)}`, 'finance')}
+                ${kpiCard('Economia', fmt.money(ov.saved), ov.saved >= 0 ? 'No positivo' : 'Atenção ao saldo', 'finance')}
+              </div>
+
+              <div class="mt-4 rounded-2xl soft-border p-4 bg-white/40 dark:bg-slate-950/20">
+                <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Frase da semana</div>
+                <div class="mt-2 text-sm md:text-base text-slate-800 dark:text-slate-100">“${phrase}”</div>
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-5 md:p-6">
+              <div class="flex items-center justify-between">
+                <div class="font-semibold">Hoje</div>
+                <button id="btnAddTaskFromHome" class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm inline-flex items-center gap-2">${Icons.plus('w-4 h-4')} Tarefa</button>
+              </div>
+              <div class="mt-3 space-y-2">
+                ${ov.tasksToday.length ? ov.tasksToday.slice(0,6).map(t => taskRowMini(t)).join('') : emptyState('Sem tarefas para hoje', 'Crie tarefas com data e lembrete para manter o ritmo.')}
+              </div>
+
+              <div class="mt-4">
+                <div class="text-sm font-semibold">Próximos prazos</div>
+                <div class="mt-2 space-y-2">
+                  ${ov.dueSoon.length ? ov.dueSoon.map(t => `
+                    <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20">
+                      <div class="min-w-0">
+                        <div class="text-sm truncate">${escapeHtml(t.title)}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">${fmt.dateHuman(t.dueDate)} • ${escapeHtml(t.project || t.list || '—')}</div>
+                      </div>
+                      <span class="shrink-0 text-[11px] px-2 py-1 rounded-full border ${badgePriority(t.priority)}">${escapeHtml(t.priority || '—')}</span>
+                    </div>
+                  `).join('') : emptyState('Nada por vencer', 'Ótimo momento para adiantar pendências.')}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-2 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-5 md:p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Progresso semanal</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Tarefas concluídas (últimos 7 dias)</div>
+                </div>
+                <button data-route="tasks" class="btnGoTasks px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Abrir</button>
+              </div>
+              <div class="mt-3">
+                <canvas id="chartTasksWeek" height="120"></canvas>
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-5 md:p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Hábitos</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Conclusões (últimos 7 dias)</div>
+                </div>
+                <button data-route="habits" class="btnGoHabits px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Abrir</button>
+              </div>
+              <div class="mt-3">
+                <canvas id="chartHabitsWeek" height="120"></canvas>
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-5 md:p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Metas</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Evolução de progresso (médias)</div>
+                </div>
+                <button data-route="goals" class="btnGoGoals px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Abrir</button>
+              </div>
+              <div class="mt-3">
+                <canvas id="chartGoals" height="120"></canvas>
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-5 md:p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Resumo financeiro</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Gastos do mês e tendência</div>
+                </div>
+                <button data-route="finance" class="btnGoFinance px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Abrir</button>
+              </div>
+              <div class="mt-3">
+                <canvas id="chartFinance" height="120"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-3 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-5 md:p-6 lg:col-span-2">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Agenda</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Próximos eventos (7 dias)</div>
+                </div>
+                <button data-route="calendar" class="btnGoCalendar px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Abrir</button>
+              </div>
+              <div class="mt-3 grid sm:grid-cols-2 gap-2">
+                ${upcomingEvents(7).length ? upcomingEvents(7).slice(0,6).map(evCardMini).join('') : emptyState('Sem eventos', 'Adicione eventos com lembretes para não perder compromissos.')}
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-5 md:p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Hábitos de hoje</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Marque rapidamente</div>
+                </div>
+                <button data-route="habits" class="btnGoHabits2 px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Abrir</button>
+              </div>
+              <div class="mt-3 space-y-2">
+                ${habitsDueToday().slice(0,6).map(habitRowMini).join('') || emptyState('Sem hábitos para hoje', 'Crie hábitos e escolha a frequência.')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function kpiCard(title, value, hint, route) {
+      return `
+        <button data-route="${route}" class="text-left rounded-2xl soft-border bg-white/35 dark:bg-slate-950/20 p-4 hover:soft-bg transition">
+          <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">${title}</div>
+          <div class="mt-2 text-xl font-semibold">${value}</div>
+          <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">${hint}</div>
+        </button>
+      `;
+    }
+
+    function emptyState(title, desc) {
+      return `
+        <div class="rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="font-semibold">${title}</div>
+          <div class="text-sm text-slate-600 dark:text-slate-300">${desc}</div>
+        </div>
+      `;
+    }
+
+    function taskRowMini(t) {
+      const checked = t.status === 'done';
+      return `
+        <div class="flex items-center gap-2 px-3 py-2 rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20">
+          <button class="btnToggleTask shrink-0 w-9 h-9 rounded-xl ${checked ? 'bg-emerald-600 text-white' : 'soft-border hover:soft-bg'} grid place-items-center" data-id="${t.id}" aria-label="Concluir">
+            ${checked ? Icons.check('w-4 h-4') : '<span class="text-slate-500">○</span>'}
+          </button>
+          <div class="min-w-0 flex-1">
+            <div class="text-sm truncate ${checked ? 'line-through opacity-60' : ''}">${escapeHtml(t.title)}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">${fmt.dateHuman(t.dueDate)} • ${escapeHtml(t.category || 'outros')}</div>
+          </div>
+          <span class="text-[11px] px-2 py-1 rounded-full border ${badgePriority(t.priority)}">${escapeHtml(t.priority || '—')}</span>
+        </div>
+      `;
+    }
+
+    function upcomingEvents(days = 7) {
+      const start = new Date();
+      const end = addDays(start, days);
+      return state.data.events
+        .filter(ev => ev.startAt && new Date(ev.startAt) >= start && new Date(ev.startAt) <= end)
+        .sort((a,b) => new Date(a.startAt) - new Date(b.startAt));
+    }
+
+    function evCardMini(ev) {
+      return `
+        <div class="rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-semibold truncate">${escapeHtml(ev.title)}</div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">${fmt.datetimeHuman(ev.startAt)}${ev.location ? ' • ' + escapeHtml(ev.location) : ''}</div>
+            </div>
+            <button class="btnEditEvent px-2 py-1 rounded-xl soft-border hover:soft-bg text-xs" data-id="${ev.id}">Editar</button>
+          </div>
+          ${ev.desc ? `<div class="mt-2 text-xs text-slate-600 dark:text-slate-300">${escapeHtml(ev.desc)}</div>` : ''}
+        </div>
+      `;
+    }
+
+    function habitsDueToday() {
+      const today = new Date();
+      const dow = today.getDay();
+      const iso = fmt.dateISO(today);
+      return state.data.habits.filter(h => {
+        const f = h.frequency || { type:'diária', daysOfWeek:[0,1,2,3,4,5,6] };
+        if (f.type === 'diária') return true;
+        if (f.type === 'semanal') return true;
+        if (f.type === 'dias_específicos') return (f.daysOfWeek || []).includes(dow);
+        return true;
+      }).map(h => ({...h, completedToday: (h.history||[]).includes(iso)}));
+    }
+
+    function habitRowMini(h) {
+      return `
+        <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20">
+          <div class="min-w-0">
+            <div class="text-sm truncate">${escapeHtml(h.name)}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">${h.time ? '⏰ ' + escapeHtml(h.time) : '—'} • Dificuldade ${'●'.repeat(h.difficulty||1)}${'○'.repeat(Math.max(0,5-(h.difficulty||1)))}</div>
+          </div>
+          <button class="btnToggleHabit shrink-0 px-3 py-2 rounded-xl ${h.completedToday ? 'bg-emerald-600 text-white' : 'soft-border hover:soft-bg'} text-sm" data-id="${h.id}">
+            ${h.completedToday ? 'Feito' : 'Marcar'}
+          </button>
+        </div>
+      `;
+    }
+
+    function bindHome() {
+      $$('[data-route]').forEach(btn => btn.addEventListener('click', () => setRoute(btn.dataset.route)));
+      $('#btnAddTaskFromHome')?.addEventListener('click', () => openTaskModal());
+      $$('.btnToggleTask').forEach(btn => btn.addEventListener('click', () => toggleTaskDone(btn.dataset.id)));
+      $$('.btnToggleHabit').forEach(btn => btn.addEventListener('click', () => toggleHabitToday(btn.dataset.id)));
+      $$('.btnEditEvent').forEach(btn => btn.addEventListener('click', () => openEventModal(btn.dataset.id)));
+      renderHomeCharts();
+    }
+
+    function renderHomeCharts() {
+      const isDark = document.documentElement.classList.contains('dark');
+      const gridColor = isDark ? 'rgba(148,163,184,.18)' : 'rgba(15,23,42,.08)';
+      const tickColor = isDark ? 'rgba(226,232,240,.75)' : 'rgba(30,41,59,.7)';
+
+      // Tasks weekly completions
+      const labels = [...Array(7)].map((_,i) => {
+        const d = addDays(startOfDay(), i-6);
+        return d.toLocaleDateString('pt-BR', { weekday:'short' });
+      });
+      const daysISO = [...Array(7)].map((_,i) => fmt.dateISO(addDays(startOfDay(), i-6)));
+      const counts = daysISO.map(day => state.data.tasks.filter(t => t.status==='done' && fmt.dateISO(t.updatedAt||t.createdAt||new Date())===day).length);
+
+      const ctx1 = $('#chartTasksWeek');
+      if (ctx1) {
+        state.charts.tasksWeek = new Chart(ctx1, {
+          type: 'bar',
+          data: { labels, datasets: [{ label:'Concluídas', data: counts, backgroundColor: 'rgba(99,102,241,.55)', borderRadius: 10 }] },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false }, tooltip: { enabled: true } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: tickColor } },
+              y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, precision: 0 } }
+            }
+          }
+        });
+      }
+
+      // Habits weekly completions (total check-ins)
+      const habitCounts = daysISO.map(day => state.data.habits.reduce((s,h)=> s + ((h.history||[]).includes(day) ? 1 : 0), 0));
+      const ctx2 = $('#chartHabitsWeek');
+      if (ctx2) {
+        state.charts.habitsWeek = new Chart(ctx2, {
+          type: 'line',
+          data: { labels, datasets: [{ label:'Hábitos', data: habitCounts, borderColor: 'rgba(16,185,129,.85)', backgroundColor: 'rgba(16,185,129,.18)', fill: true, tension: .35, pointRadius: 3 }] },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: tickColor } },
+              y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, precision: 0 } }
+            }
+          }
+        });
+      }
+
+      // Goals progress
+      const goals = state.data.goals;
+      const goalLabels = goals.slice(0,6).map(g => g.title.length > 18 ? g.title.slice(0,18)+'…' : g.title);
+      const goalProgress = goals.slice(0,6).map(g => computeGoalProgress(g));
+      const ctx3 = $('#chartGoals');
+      if (ctx3) {
+        state.charts.goals = new Chart(ctx3, {
+          type: 'bar',
+          data: { labels: goalLabels, datasets: [{ data: goalProgress, backgroundColor: 'rgba(14,165,233,.55)', borderRadius: 10 }] },
+          options: {
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: tickColor } },
+              y: { beginAtZero: true, max: 100, grid: { color: gridColor }, ticks: { color: tickColor, callback: v => v+'%' } }
+            }
+          }
+        });
+      }
+
+      // Finance monthly expense trend (last 6 months)
+      const months = [...Array(6)].map((_,i) => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - (5-i));
+        return fmt.monthKey(d);
+      });
+      const monthLabels = months.map(m => {
+        const [y,mm] = m.split('-');
+        return `${mm}/${y.slice(2)}`;
+      });
+      const expenseByMonth = months.map(m => state.data.transactions.filter(t => t.type==='expense' && fmt.monthKey(t.date)===m).reduce((s,t)=>s+Number(t.amount||0),0));
+      const ctx4 = $('#chartFinance');
+      if (ctx4) {
+        state.charts.finance = new Chart(ctx4, {
+          type: 'line',
+          data: { labels: monthLabels, datasets: [{ data: expenseByMonth, borderColor: 'rgba(245,158,11,.85)', backgroundColor: 'rgba(245,158,11,.18)', fill: true, tension: .35, pointRadius: 3 }] },
+          options: {
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: tickColor } },
+              y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, callback: v => 'R$ ' + Number(v).toLocaleString('pt-BR') } }
+            }
+          }
+        });
+      }
+    }
+
+    // -------------------------
+    // Quick Add
+    // -------------------------
+    function openQuickAdd() {
+      openModal({
+        title: 'Criar novo…',
+        primaryText: 'Criar',
+        secondaryText: 'Fechar',
+        bodyHtml: `
+          <div class="grid sm:grid-cols-2 gap-3">
+            ${quickAddTile('Tarefa', 'Crie com prioridade, tags e lembrete', 'tasks', Icons.list('w-5 h-5'))}
+            ${quickAddTile('Hábito', 'Frequência e chain tracker', 'habits', Icons.flame('w-5 h-5'))}
+            ${quickAddTile('Meta', 'Prazo + subtarefas', 'goals', Icons.target('w-5 h-5'))}
+            ${quickAddTile('Evento', 'Agenda com lembretes', 'calendar', Icons.calendar('w-5 h-5'))}
+            ${quickAddTile('Transação', 'Receita ou despesa', 'finance', Icons.money('w-5 h-5'))}
+            ${quickAddTile('Nota', 'Rich text e tags', 'notes', Icons.note('w-5 h-5'))}
+          </div>
+        `,
+        onPrimary: () => false,
+        onSecondary: () => {}
+      });
+
+      $$('.qa').forEach(btn => btn.addEventListener('click', () => {
+        const type = btn.dataset.type;
+        if (type === 'tasks') { openTaskModal(); }
+        if (type === 'habits') { openHabitModal(); }
+        if (type === 'goals') { openGoalModal(); }
+        if (type === 'calendar') { openEventModal(); }
+        if (type === 'finance') { openTransactionModal(); }
+        if (type === 'notes') { openNoteModal(); }
+      }));
+    }
+
+    function quickAddTile(title, desc, type, icon) {
+      return `
+        <button class="qa text-left rounded-3xl soft-border bg-white/30 dark:bg-slate-950/20 p-4 hover:soft-bg transition" data-type="${type}">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl bg-indigo-600/10 text-indigo-700 dark:text-indigo-300 grid place-items-center">${icon}</div>
+            <div>
+              <div class="font-semibold">${title}</div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">${desc}</div>
+            </div>
+          </div>
+        </button>
+      `;
+    }
+
+    // -------------------------
+    // Tasks
+    // -------------------------
+    const TASK_CATEGORIES = ['trabalho','estudos','saúde','família','espiritual','finanças','outros'];
+    const TASK_PRIORITIES = ['baixa','média','alta'];
+    const TASK_LISTS = ['Hoje','Semana','Projetos','Pendências'];
+
+    function renderTasks() {
+      const ui = state.data.ui;
+      const viewMode = ui.tasksView || 'listas';
+      const tab = ui.tasksListTab || 'Hoje';
+      const q = (state.search.tasks || '').toLowerCase();
+
+      const tasks = state.data.tasks
+        .filter(t => {
+          if (!q) return true;
+          const bag = `${t.title} ${t.desc||''} ${(t.tags||[]).join(' ')} ${t.category||''} ${t.project||''} ${t.list||''}`.toLowerCase();
+          return bag.includes(q);
+        })
+        .sort((a,b) => {
+          const pa = TASK_PRIORITIES.indexOf(a.priority||'média');
+          const pb = TASK_PRIORITIES.indexOf(b.priority||'média');
+          if (pa !== pb) return pb - pa;
+          return (a.dueDate||'9999-99-99').localeCompare(b.dueDate||'9999-99-99');
+        });
+
+      const filtered = filterTasksByTab(tasks, tab);
+
+      return `
+        <div class="space-y-4 md:space-y-6 fade-in">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">CRUD completo • tags • prioridades • lembretes • kanban</div>
+              <div class="text-xl font-semibold">Gestão de Tarefas</div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="btnAddTask" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm inline-flex items-center gap-2">${Icons.plus('w-4 h-4')} Nova tarefa</button>
+              <div class="flex items-center gap-1 rounded-xl soft-border p-1 bg-white/25 dark:bg-slate-950/20">
+                <button id="btnListMode" class="px-3 py-2 rounded-xl text-sm ${viewMode==='listas' ? 'bg-indigo-600 text-white' : 'hover:soft-bg'}">Listas</button>
+                <button id="btnKanbanMode" class="px-3 py-2 rounded-xl text-sm ${viewMode==='kanban' ? 'bg-indigo-600 text-white' : 'hover:soft-bg'}">Kanban</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass2 rounded-3xl p-4 md:p-5">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div class="flex flex-wrap gap-2">
+                ${TASK_LISTS.map(t => `<button class="taskTab px-3 py-2 rounded-xl text-sm soft-border ${tab===t ? 'bg-indigo-600 text-white border-transparent' : 'bg-white/30 dark:bg-slate-950/20 hover:soft-bg'}" data-tab="${t}">${t}</button>`).join('')}
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 px-3 py-2 rounded-xl soft-border bg-white/30 dark:bg-slate-950/20 text-sm">
+                  <span class="opacity-70">${Icons.search('w-4 h-4')}</span>
+                  <input id="tasksSearch" class="bg-transparent outline-none w-56" placeholder="Buscar tarefas..." value="${escapeAttr(state.search.tasks||'')}" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          ${viewMode === 'kanban' ? renderKanban(filtered) : renderTaskList(filtered, tab)}
+        </div>
+      `;
+    }
+
+    function filterTasksByTab(tasks, tab) {
+      const today = fmt.dateISO(new Date());
+      const weekEnd = fmt.dateISO(addDays(startOfDay(), 7));
+
+      if (tab === 'Hoje') return tasks.filter(t => t.dueDate === today || t.list==='Hoje');
+      if (tab === 'Semana') return tasks.filter(t => (t.dueDate && t.dueDate >= today && t.dueDate <= weekEnd) || t.list==='Semana');
+      if (tab === 'Projetos') return tasks.filter(t => (t.project && t.project.trim()) || t.list==='Projetos');
+      if (tab === 'Pendências') return tasks.filter(t => t.status !== 'done' || t.list==='Pendências');
+      return tasks;
+    }
+
+    function renderTaskList(tasks, tab) {
+      const grouped = {
+        todo: tasks.filter(t=>t.status==='todo'),
+        doing: tasks.filter(t=>t.status==='doing'),
+        done: tasks.filter(t=>t.status==='done')
+      };
+
+      const help = tab === 'Projetos'
+        ? 'Dica: use o campo “Projeto” para agrupar tarefas.'
+        : 'Dica: ative lembretes com data/hora para receber alertas (com o app aberto).';
+
+      return `
+        <div class="grid lg:grid-cols-3 gap-4 md:gap-6">
+          ${taskCol('A fazer', grouped.todo, 'todo')}
+          ${taskCol('Em andamento', grouped.doing, 'doing')}
+          ${taskCol('Concluídas', grouped.done, 'done')}
+          <div class="lg:col-span-3">
+            <div class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-4 text-sm text-slate-600 dark:text-slate-300">${help}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function taskCol(title, tasks, status) {
+      return `
+        <div class="glass2 rounded-3xl p-4 md:p-5">
+          <div class="flex items-center justify-between">
+            <div class="font-semibold">${title}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">${tasks.length}</div>
+          </div>
+          <div class="mt-3 space-y-2" data-dropzone="${status}">
+            ${tasks.length ? tasks.map(taskCard).join('') : `<div class="rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20 p-4 text-sm text-slate-600 dark:text-slate-300">Sem itens.</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function taskCard(t) {
+      const tags = (t.tags||[]).slice(0,4);
+      return `
+        <div class="taskCard rounded-3xl soft-border bg-white/30 dark:bg-slate-950/20 p-4 hover:soft-bg transition" draggable="true" data-id="${t.id}">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-semibold truncate">${escapeHtml(t.title)}</div>
+              <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                ${t.dueDate ? `${fmt.dateHuman(t.dueDate)} • ` : ''}${escapeHtml(t.project || t.list || '—')}
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <button class="btnTaskDone p-2 rounded-xl ${t.status==='done' ? 'bg-emerald-600 text-white' : 'soft-border hover:soft-bg'}" data-id="${t.id}" aria-label="Concluir">${Icons.check('w-4 h-4')}</button>
+              <button class="btnEditTask p-2 rounded-xl soft-border hover:soft-bg" data-id="${t.id}" aria-label="Editar">✎</button>
+              <button class="btnDelTask p-2 rounded-xl soft-border hover:soft-bg" data-id="${t.id}" aria-label="Excluir">🗑</button>
+            </div>
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <span class="text-[11px] px-2 py-1 rounded-full border ${badgeCategory(t.category)}">${escapeHtml(t.category||'outros')}</span>
+            <span class="text-[11px] px-2 py-1 rounded-full border ${badgePriority(t.priority)}">${escapeHtml(t.priority||'média')}</span>
+            ${tags.map(x => `<span class="text-[11px] px-2 py-1 rounded-full soft-border bg-white/25 dark:bg-slate-950/20">#${escapeHtml(x)}</span>`).join('')}
+          </div>
+          ${t.reminderAt ? `<div class="mt-2 text-xs text-slate-600 dark:text-slate-300">🔔 ${fmt.datetimeHuman(t.reminderAt)}</div>` : ''}
+          ${t.desc ? `<div class="mt-2 text-sm text-slate-700 dark:text-slate-200">${escapeHtml(t.desc)}</div>` : ''}
+        </div>
+      `;
+    }
+
+    function renderKanban(tasks) {
+      const cols = [
+        { key: 'todo', title: 'A fazer' },
+        { key: 'doing', title: 'Em andamento' },
+        { key: 'done', title: 'Concluídas' }
+      ];
+      return `
+        <div class="grid lg:grid-cols-3 gap-4 md:gap-6">
+          ${cols.map(c => {
+            const items = tasks.filter(t => t.status === c.key);
+            return `
+              <div class="glass2 rounded-3xl p-4 md:p-5">
+                <div class="flex items-center justify-between">
+                  <div class="font-semibold">${c.title}</div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400">Arraste & solte</div>
+                </div>
+                <div class="mt-3 space-y-2 min-h-[160px]" data-dropzone="${c.key}">
+                  ${items.length ? items.map(taskCard).join('') : `<div class="rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20 p-4 text-sm text-slate-600 dark:text-slate-300">Solte tarefas aqui.</div>`}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function bindTasks() {
+      // Search
+      $('#tasksSearch')?.addEventListener('input', (e) => {
+        state.search.tasks = e.target.value;
+        renderView();
+      });
+
+      // Tabs
+      $$('.taskTab').forEach(btn => btn.addEventListener('click', () => {
+        state.data.ui.tasksListTab = btn.dataset.tab;
+        saveDataFor(state.user.id, state.data);
+        renderView();
+      }));
+
+      // Mode toggle
+      $('#btnListMode')?.addEventListener('click', () => { state.data.ui.tasksView = 'listas'; saveDataFor(state.user.id, state.data); renderView(); });
+      $('#btnKanbanMode')?.addEventListener('click', () => { state.data.ui.tasksView = 'kanban'; saveDataFor(state.user.id, state.data); renderView(); });
+
+      $('#btnAddTask')?.addEventListener('click', () => openTaskModal());
+
+      // Actions
+      $$('.btnEditTask').forEach(b => b.addEventListener('click', () => openTaskModal(b.dataset.id)));
+      $$('.btnDelTask').forEach(b => b.addEventListener('click', () => deleteTask(b.dataset.id)));
+      $$('.btnTaskDone').forEach(b => b.addEventListener('click', () => toggleTaskDone(b.dataset.id)));
+
+      // Drag & drop
+      $$('.taskCard').forEach(card => {
+        card.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', card.dataset.id);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+      });
+      $$('[data-dropzone]').forEach(zone => {
+        zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+        zone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          zone.classList.remove('drag-over');
+          const id = e.dataTransfer.getData('text/plain');
+          const status = zone.dataset.dropzone;
+          moveTaskStatus(id, status);
+        });
+      });
+    }
+
+    function openTaskModal(taskId=null) {
+      const t = taskId ? state.data.tasks.find(x => x.id === taskId) : null;
+      const isEdit = !!t;
+      const due = t?.dueDate || fmt.dateISO(new Date());
+      const reminder = t?.reminderAt ? t.reminderAt.slice(0,16) : '';
+
+      openModal({
+        title: isEdit ? 'Editar tarefa' : 'Nova tarefa',
+        primaryText: isEdit ? 'Salvar' : 'Criar',
+        bodyHtml: `
+          <form id="taskForm" class="grid gap-3">
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Título
+                <input name="title" required class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500/30" value="${escapeAttr(t?.title||'')}" placeholder="Ex: Estudar 30 min" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Projeto
+                <input name="project" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500/30" value="${escapeAttr(t?.project||'')}" placeholder="Ex: Trabalho, Casa, Saúde" />
+              </label>
+            </div>
+
+            <label class="text-xs text-slate-600 dark:text-slate-300">Descrição
+              <textarea name="desc" rows="3" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500/30" placeholder="Detalhes (opcional)">${escapeHtml(t?.desc||'')}</textarea>
+            </label>
+
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Categoria
+                <select name="category" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  ${TASK_CATEGORIES.map(c => `<option ${t?.category===c?'selected':''} value="${c}">${c}</option>`).join('')}
+                </select>
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Prioridade
+                <select name="priority" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  ${TASK_PRIORITIES.map(p => `<option ${t?.priority===p?'selected':''} value="${p}">${p}</option>`).join('')}
+                </select>
+              </label>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Lista
+                <select name="list" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  ${TASK_LISTS.map(l => `<option ${t?.list===l?'selected':''} value="${l}">${l}</option>`).join('')}
+                </select>
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Status
+                <select name="status" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  ${['todo','doing','done'].map(s => `<option ${t?.status===s?'selected':''} value="${s}">${({todo:'todo',doing:'doing',done:'done'})[s]}</option>`).join('')}
+                </select>
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Data
+                <input name="dueDate" type="date" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(due)}" />
+              </label>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Tags (separadas por vírgula)
+                <input name="tags" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr((t?.tags||[]).join(', '))}" placeholder="ex: foco, projetoX" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Lembrete (opcional)
+                <input name="reminder" type="datetime-local" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(reminder)}" />
+              </label>
+            </div>
+
+            <div class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-4 text-sm text-slate-600 dark:text-slate-300">
+              <b>Observação:</b> lembretes e notificações funcionam quando o app está aberto. Para push real, seria necessário Service Worker.
+            </div>
+          </form>
+        `,
+        onPrimary: async (wrap) => {
+          const form = $('#taskForm', wrap);
+          const fd = new FormData(form);
+          const title = (fd.get('title')||'').toString().trim();
+          if (!title) { toast('Informe o título.', 'warn'); return false; }
+
+          const tags = (fd.get('tags')||'').toString().split(',').map(x => x.trim()).filter(Boolean);
+          const reminderVal = fd.get('reminder')?.toString() || '';
+          const reminderAt = reminderVal ? new Date(reminderVal).toISOString() : '';
+
+          const payload = {
+            title,
+            project: (fd.get('project')||'').toString().trim(),
+            desc: (fd.get('desc')||'').toString().trim(),
+            category: fd.get('category'),
+            priority: fd.get('priority'),
+            list: fd.get('list'),
+            status: fd.get('status'),
+            dueDate: fd.get('dueDate') || '',
+            reminderAt,
+            tags,
+            updatedAt: nowISO()
+          };
+
+          if (isEdit) {
+            Object.assign(t, payload);
+          } else {
+            state.data.tasks.push({
+              id: uid(),
+              ...payload,
+              createdAt: nowISO()
+            });
+          }
+
+          saveDataFor(state.user.id, state.data);
+          scheduleReminders();
+          toast(isEdit ? 'Tarefa atualizada.' : 'Tarefa criada.', 'ok');
+          renderView();
+        }
+      });
+    }
+
+    function toggleTaskDone(id) {
+      const t = state.data.tasks.find(x => x.id === id);
+      if (!t) return;
+      t.status = (t.status === 'done') ? 'todo' : 'done';
+      t.updatedAt = nowISO();
+      saveDataFor(state.user.id, state.data);
+      toast(t.status === 'done' ? 'Tarefa concluída.' : 'Tarefa reaberta.', 'ok');
+      renderView();
+    }
+
+    function moveTaskStatus(id, status) {
+      const t = state.data.tasks.find(x => x.id === id);
+      if (!t) return;
+      t.status = status;
+      t.updatedAt = nowISO();
+      saveDataFor(state.user.id, state.data);
+      renderView();
+    }
+
+    async function deleteTask(id) {
+      const t = state.data.tasks.find(x => x.id === id);
+      if (!t) return;
+      const ok = await confirmModal({
+        title: 'Excluir tarefa',
+        message: `Excluir “<b>${escapeHtml(t.title)}</b>”? Esta ação não pode ser desfeita.`,
+        danger: true,
+        confirmText: 'Excluir'
+      });
+      if (!ok) return;
+      state.data.tasks = state.data.tasks.filter(x => x.id !== id);
+      saveDataFor(state.user.id, state.data);
+      toast('Tarefa excluída.', 'ok');
+      renderView();
+    }
+
+    // -------------------------
+    // Habits
+    // -------------------------
+    function renderHabits() {
+      const todayIso = fmt.dateISO(new Date());
+      const q = (state.search.tasks || '').toLowerCase();
+      const habits = state.data.habits
+        .filter(h => !q || `${h.name} ${(h.frequency?.type||'')}`.toLowerCase().includes(q))
+        .sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+
+      const month = state.calendar.focusMonth;
+      const monthKey = fmt.monthKey(month);
+
+      return `
+        <div class="space-y-4 md:space-y-6 fade-in">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Calendário • chain tracker • gamificação leve</div>
+              <div class="text-xl font-semibold">Gestão de Hábitos</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btnAddHabit" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm inline-flex items-center gap-2">${Icons.plus('w-4 h-4')} Novo hábito</button>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-3 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-4 md:p-5 lg:col-span-2">
+              <div class="flex items-center justify-between gap-2">
+                <div>
+                  <div class="font-semibold">Hoje</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Marque seus hábitos rapidamente</div>
+                </div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">${fmt.dateHuman(todayIso)}</div>
+              </div>
+              <div class="mt-3 grid sm:grid-cols-2 gap-2">
+                ${habitsDueToday().length ? habitsDueToday().map(h => habitCardToday(h)).join('') : emptyState('Nenhum hábito para hoje', 'Crie hábitos com frequência diária/semanal/dias específicos.')}
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Conquistas</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">XP e níveis (opcional)</div>
+                </div>
+              </div>
+              <div class="mt-3 space-y-2">
+                ${renderHabitAchievements()}
+              </div>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-2 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Hábito → Chain Tracker</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Últimos 14 dias (não quebre a corrente)</div>
+                </div>
+                <select id="habitPick" class="px-3 py-2 rounded-xl soft-border bg-transparent text-sm">
+                  ${habits.map(h => `<option value="${h.id}">${escapeHtml(h.name)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="mt-3" id="habitChain"></div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Calendário de acompanhamento</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Mês: <span class="font-medium">${month.toLocaleDateString('pt-BR', { month:'long', year:'numeric' })}</span></div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button id="btnMonthPrev" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">←</button>
+                  <button id="btnMonthNext" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">→</button>
+                </div>
+              </div>
+              <div class="mt-3" id="habitsMonthCal">${renderHabitsCalendar(month)}</div>
+              <div class="mt-3 text-xs text-slate-500 dark:text-slate-400">Dica: clique em um dia para ver quantos hábitos foram concluídos.</div>
+            </div>
+          </div>
+
+          <div class="glass2 rounded-3xl p-4 md:p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-semibold">Todos os hábitos</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">Gerencie frequência, horário e dificuldade</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl soft-border bg-white/30 dark:bg-slate-950/20 text-sm">
+                  <span class="opacity-70">${Icons.search('w-4 h-4')}</span>
+                  <input id="habitsSearch" class="bg-transparent outline-none w-64" placeholder="Buscar hábitos..." value="${escapeAttr(state.search.tasks||'')}" />
+                </div>
+              </div>
+            </div>
+            <div class="mt-3 grid md:grid-cols-2 lg:grid-cols-3 gap-2">
+              ${habits.length ? habits.map(h => habitCardManage(h, monthKey)).join('') : emptyState('Sem hábitos', 'Crie pelo menos 1 hábito para acompanhar sua consistência.')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderHabitAchievements() {
+      const all = state.data.habits;
+      const totalXp = all.reduce((s,h)=> s + Number(h.xp||0), 0);
+      const totalCheckins = all.reduce((s,h)=> s + (h.history||[]).length, 0);
+      const bestStreak = all.reduce((m,h)=> Math.max(m, computeHabitStreak(h).best), 0);
+      const level = Math.max(1, Math.floor(totalXp / 50) + 1);
+      const next = level*50;
+      const pct = clamp((totalXp / next) * 100, 0, 100);
+
+      return `
+        <div class="rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="flex items-center justify-between">
+            <div class="font-semibold">Nível ${level}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">XP: ${totalXp}</div>
+          </div>
+          <div class="mt-2 w-full h-2 rounded-full bg-slate-200/60 dark:bg-slate-800/60 overflow-hidden">
+            <div class="h-full bg-indigo-600" style="width:${pct}%"></div>
+          </div>
+          <div class="mt-2 text-xs text-slate-600 dark:text-slate-300">Próximo nível em ${next - totalXp} XP</div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          ${miniStat('Check-ins', totalCheckins)}
+          ${miniStat('Hábitos', all.length)}
+          ${miniStat('Melhor streak', bestStreak+'d')}
+        </div>
+      `;
+    }
+
+    function miniStat(label, value) {
+      return `
+        <div class="rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="text-xs text-slate-500 dark:text-slate-400">${label}</div>
+          <div class="mt-1 font-semibold">${value}</div>
+        </div>
+      `;
+    }
+
+    function habitCardToday(h) {
+      const streak = computeHabitStreak(h).current;
+      return `
+        <div class="rounded-3xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-semibold truncate">${escapeHtml(h.name)}</div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">${freqLabel(h.frequency)}${h.time ? ' • ' + escapeHtml(h.time) : ''}</div>
+              <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">Streak atual: <b>${streak}</b> dia(s)</div>
+            </div>
+            <button class="btnToggleHabitToday px-3 py-2 rounded-xl ${h.completedToday ? 'bg-emerald-600 text-white' : 'soft-border hover:soft-bg'} text-sm" data-id="${h.id}">${h.completedToday ? 'Feito' : 'Marcar'}</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function habitCardManage(h) {
+      const streak = computeHabitStreak(h);
+      return `
+        <div class="rounded-3xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-semibold truncate">${escapeHtml(h.name)}</div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">${freqLabel(h.frequency)}${h.time ? ' • ' + escapeHtml(h.time) : ''}</div>
+              <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">Streak: ${streak.current}d • Melhor: ${streak.best}d</div>
+            </div>
+            <div class="flex items-center gap-1">
+              <button class="btnEditHabit p-2 rounded-xl soft-border hover:soft-bg" data-id="${h.id}">✎</button>
+              <button class="btnDelHabit p-2 rounded-xl soft-border hover:soft-bg" data-id="${h.id}">🗑</button>
+            </div>
+          </div>
+          <div class="mt-3 flex items-center justify-between">
+            <div class="text-xs text-slate-600 dark:text-slate-300">Dificuldade</div>
+            <div class="text-xs">${'●'.repeat(h.difficulty||1)}${'○'.repeat(Math.max(0,5-(h.difficulty||1)))}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function freqLabel(f) {
+      if (!f) return 'Diária';
+      if (f.type === 'diária') return 'Diária';
+      if (f.type === 'semanal') return 'Semanal';
+      if (f.type === 'dias_específicos') {
+        const map = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+        const days = (f.daysOfWeek||[]).map(d=>map[d]).join(', ');
+        return `Dias: ${days || '—'}`;
+      }
+      return 'Personalizada';
+    }
+
+    function computeHabitStreak(h) {
+      const hist = new Set(h.history || []);
+      const today = startOfDay();
+      let current = 0;
+      for (let i=0;i<365;i++) {
+        const d = fmt.dateISO(addDays(today, -i));
+        if (hist.has(d)) current++; else break;
+      }
+      // best streak
+      const dates = [...hist].sort();
+      let best = 0, run = 0;
+      for (let i=0;i<dates.length;i++) {
+        const d = new Date(dates[i]);
+        const prev = i ? new Date(dates[i-1]) : null;
+        const diff = prev ? Math.round((d - prev)/86400000) : 999;
+        if (diff === 1) run++; else run = 1;
+        best = Math.max(best, run);
+      }
+      return { current, best };
+    }
+
+    function renderChainTracker(habitId) {
+      const h = state.data.habits.find(x => x.id === habitId) || state.data.habits[0];
+      if (!h) return emptyState('Sem hábitos', 'Crie um hábito para visualizar o chain tracker.');
+      const hist = new Set(h.history || []);
+      const days = [...Array(14)].map((_,i) => addDays(startOfDay(), -(13-i)));
+      const items = days.map(d => {
+        const iso = fmt.dateISO(d);
+        const done = hist.has(iso);
+        return `
+          <div class="flex flex-col items-center gap-2">
+            <div class="text-[11px] text-slate-500 dark:text-slate-400">${d.toLocaleDateString('pt-BR', { weekday:'short' })}</div>
+            <button class="btnToggleHabitDay w-10 h-10 rounded-2xl ${done ? 'bg-emerald-600 text-white' : 'soft-border hover:soft-bg'}" data-id="${h.id}" data-day="${iso}" title="${iso}">
+              ${done ? Icons.check('w-4 h-4') : '<span class="text-slate-500">•</span>'}
+            </button>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400">${String(d.getDate()).padStart(2,'0')}</div>
+          </div>
+        `;
+      }).join('');
+
+      const streak = computeHabitStreak(h);
+      return `
+        <div class="rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-semibold">${escapeHtml(h.name)}</div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Streak atual: <b>${streak.current}d</b> • Melhor: <b>${streak.best}d</b></div>
+            </div>
+            <button class="btnEditHabit px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" data-id="${h.id}">Editar</button>
+          </div>
+          <div class="mt-4 grid grid-cols-7 gap-2">${items}</div>
+        </div>
+      `;
+    }
+
+    function renderHabitsCalendar(monthDate) {
+      const d = new Date(monthDate);
+      d.setDate(1);
+      const startDay = d.getDay();
+      const start = addDays(d, -startDay);
+      const cells = [...Array(42)].map((_,i) => addDays(start, i));
+      const monthKey = fmt.monthKey(monthDate);
+      const histCountByDay = {};
+      state.data.habits.forEach(h => (h.history||[]).forEach(day => { if (day.startsWith(monthKey)) histCountByDay[day] = (histCountByDay[day]||0)+1; }));
+
+      const week = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+      return `
+        <div class="grid grid-cols-7 gap-2">
+          ${week.map(w => `<div class="text-[11px] text-slate-500 dark:text-slate-400 px-1">${w}</div>`).join('')}
+          ${cells.map(day => {
+            const iso = fmt.dateISO(day);
+            const inMonth = fmt.monthKey(day) === monthKey;
+            const c = histCountByDay[iso] || 0;
+            const isToday = iso === fmt.dateISO(new Date());
+            return `
+              <button class="btnCalDay rounded-2xl soft-border ${inMonth ? 'bg-white/25 dark:bg-slate-950/15' : 'bg-white/10 dark:bg-slate-950/10 opacity-70'} p-3 text-left hover:soft-bg transition" data-day="${iso}">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm ${isToday ? 'font-semibold text-indigo-600 dark:text-indigo-300' : ''}">${day.getDate()}</div>
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400">${c ? c+'✓' : ''}</div>
+                </div>
+                <div class="mt-2 h-1.5 w-full rounded-full bg-slate-200/60 dark:bg-slate-800/60 overflow-hidden">
+                  <div class="h-full bg-emerald-600" style="width:${state.data.habits.length ? Math.min(100,(c/state.data.habits.length)*100) : 0}%"></div>
+                </div>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function bindHabits() {
+      $('#btnAddHabit')?.addEventListener('click', () => openHabitModal());
+      $('#habitsSearch')?.addEventListener('input', (e) => { state.search.tasks = e.target.value; renderView(); });
+
+      $$('.btnToggleHabitToday').forEach(b => b.addEventListener('click', () => toggleHabitToday(b.dataset.id)));
+      $$('.btnEditHabit').forEach(b => b.addEventListener('click', () => openHabitModal(b.dataset.id)));
+      $$('.btnDelHabit').forEach(b => b.addEventListener('click', () => deleteHabit(b.dataset.id)));
+
+      // Chain tracker
+      const pick = $('#habitPick');
+      if (pick) {
+        const first = state.data.habits[0]?.id;
+        if (first) {
+          $('#habitChain').innerHTML = renderChainTracker(first);
+          bindChainTracker();
+        } else {
+          $('#habitChain').innerHTML = emptyState('Sem hábitos', 'Crie um hábito para ver o chain tracker.');
+        }
+
+        pick.addEventListener('change', () => {
+          $('#habitChain').innerHTML = renderChainTracker(pick.value);
+          bindChainTracker();
+        });
+      }
+
+      // Month nav
+      $('#btnMonthPrev')?.addEventListener('click', () => {
+        const d = new Date(state.calendar.focusMonth);
+        d.setMonth(d.getMonth()-1);
+        state.calendar.focusMonth = d;
+        renderView();
+      });
+      $('#btnMonthNext')?.addEventListener('click', () => {
+        const d = new Date(state.calendar.focusMonth);
+        d.setMonth(d.getMonth()+1);
+        state.calendar.focusMonth = d;
+        renderView();
+      });
+
+      $$('.btnCalDay').forEach(b => b.addEventListener('click', () => {
+        const iso = b.dataset.day;
+        const total = state.data.habits.reduce((s,h)=> s + ((h.history||[]).includes(iso) ? 1 : 0), 0);
+        toast(`<b>${iso}</b><br>Hábitos concluídos: <b>${total}</b>`, 'info');
+      }));
+    }
+
+    function bindChainTracker() {
+      $$('.btnToggleHabitDay').forEach(b => b.addEventListener('click', () => toggleHabitOnDay(b.dataset.id, b.dataset.day)));
+      $$('.btnEditHabit').forEach(b => b.addEventListener('click', () => openHabitModal(b.dataset.id)));
+    }
+
+    function toggleHabitToday(id) {
+      const today = fmt.dateISO(new Date());
+      toggleHabitOnDay(id, today);
+    }
+
+    function toggleHabitOnDay(id, dayIso) {
+      const h = state.data.habits.find(x => x.id === id);
+      if (!h) return;
+      h.history = h.history || [];
+      const idx = h.history.indexOf(dayIso);
+      if (idx >= 0) {
+        h.history.splice(idx, 1);
+        h.xp = Math.max(0, Number(h.xp||0) - 5);
+      } else {
+        h.history.push(dayIso);
+        h.xp = Number(h.xp||0) + 5 + (Number(h.difficulty||1) * 2);
+      }
+      h.level = Math.max(1, Math.floor((Number(h.xp||0)) / 50) + 1);
+      h.updatedAt = nowISO();
+      saveDataFor(state.user.id, state.data);
+      renderView();
+    }
+
+    function openHabitModal(habitId=null) {
+      const h = habitId ? state.data.habits.find(x => x.id === habitId) : null;
+      const isEdit = !!h;
+      const freqType = h?.frequency?.type || 'diária';
+      const days = new Set(h?.frequency?.daysOfWeek || [0,1,2,3,4,5,6]);
+
+      openModal({
+        title: isEdit ? 'Editar hábito' : 'Novo hábito',
+        primaryText: isEdit ? 'Salvar' : 'Criar',
+        bodyHtml: `
+          <form id="habitForm" class="grid gap-3">
+            <label class="text-xs text-slate-600 dark:text-slate-300">Nome
+              <input name="name" required class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500/30" value="${escapeAttr(h?.name||'')}" placeholder="Ex: Meditar 5 min" />
+            </label>
+
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Frequência
+                <select name="freqType" id="freqType" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  <option value="diária" ${freqType==='diária'?'selected':''}>Diária</option>
+                  <option value="semanal" ${freqType==='semanal'?'selected':''}>Semanal</option>
+                  <option value="dias_específicos" ${freqType==='dias_específicos'?'selected':''}>Dias específicos</option>
+                </select>
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Horário
+                <input name="time" type="time" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(h?.time||'')}">
+              </label>
+            </div>
+
+            <div id="daysPickWrap" class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-4 ${freqType==='dias_específicos' ? '' : 'hidden'}">
+              <div class="text-sm font-semibold">Dias da semana</div>
+              <div class="mt-2 grid grid-cols-7 gap-2">
+                ${['D','S','T','Q','Q','S','S'].map((lab, idx) => {
+                  const day = [0,1,2,3,4,5,6][idx];
+                  const on = days.has(day);
+                  return `<label class="cursor-pointer">
+                    <input type="checkbox" name="dow" value="${day}" class="hidden" ${on?'checked':''}>
+                    <div class="w-10 h-10 rounded-2xl grid place-items-center soft-border ${on ? 'bg-indigo-600 text-white border-transparent' : 'bg-white/20 dark:bg-slate-950/10 hover:soft-bg'} transition">${lab}</div>
+                  </label>`;
+                }).join('')}
+              </div>
+            </div>
+
+            <label class="text-xs text-slate-600 dark:text-slate-300">Dificuldade
+              <input name="difficulty" type="range" min="1" max="5" value="${escapeAttr(String(h?.difficulty||2))}" class="w-full" />
+              <div class="text-xs text-slate-500 dark:text-slate-400">1 (leve) • 5 (difícil)</div>
+            </label>
+          </form>
+        `,
+        onPrimary: (wrap) => {
+          const form = $('#habitForm', wrap);
+          const fd = new FormData(form);
+          const name = (fd.get('name')||'').toString().trim();
+          if (!name) { toast('Informe o nome do hábito.', 'warn'); return false; }
+
+          const type = fd.get('freqType')?.toString() || 'diária';
+          let daysOfWeek = [0,1,2,3,4,5,6];
+          if (type === 'dias_específicos') {
+            daysOfWeek = fd.getAll('dow').map(x => Number(x));
+            if (!daysOfWeek.length) daysOfWeek = [1,2,3,4,5];
+          }
+
+          const payload = {
+            name,
+            frequency: { type, daysOfWeek },
+            time: fd.get('time')?.toString() || '',
+            difficulty: Number(fd.get('difficulty')||2),
+            updatedAt: nowISO()
+          };
+
+          if (isEdit) {
+            Object.assign(h, payload);
+          } else {
+            state.data.habits.push({
+              id: uid(),
+              ...payload,
+              history: [],
+              xp: 0,
+              level: 1,
+              createdAt: nowISO()
+            });
+          }
+
+          saveDataFor(state.user.id, state.data);
+          toast(isEdit ? 'Hábito atualizado.' : 'Hábito criado.', 'ok');
+          renderView();
+        }
+      });
+
+      // dynamic days picker
+      const modal = $('.fixed.z-[60]');
+      if (modal) {
+        $('#freqType', modal)?.addEventListener('change', (e) => {
+          const v = e.target.value;
+          const wrap = $('#daysPickWrap', modal);
+          if (wrap) wrap.classList.toggle('hidden', v !== 'dias_específicos');
+        });
+      }
+    }
+
+    async function deleteHabit(id) {
+      const h = state.data.habits.find(x => x.id === id);
+      if (!h) return;
+      const ok = await confirmModal({
+        title: 'Excluir hábito',
+        message: `Excluir “<b>${escapeHtml(h.name)}</b>”? (histórico será removido)`,
+        danger: true,
+        confirmText: 'Excluir'
+      });
+      if (!ok) return;
+      state.data.habits = state.data.habits.filter(x => x.id !== id);
+      saveDataFor(state.user.id, state.data);
+      toast('Hábito excluído.', 'ok');
+      renderView();
+    }
+
+    // -------------------------
+    // Goals
+    // -------------------------
+    function computeGoalProgress(g) {
+      if (!g) return 0;
+      if (g.progressMode === 'auto' && (g.linkedTaskIds||[]).length) {
+        const linked = state.data.tasks.filter(t => (g.linkedTaskIds||[]).includes(t.id));
+        if (!linked.length) return 0;
+        const done = linked.filter(t => t.status==='done').length;
+        return Math.round((done/linked.length)*100);
+      }
+      return clamp(Number(g.progress||0), 0, 100);
+    }
+
+    function renderGoals() {
+      const q = (state.search.tasks || '').toLowerCase();
+      const goals = state.data.goals
+        .filter(g => !q || `${g.title} ${g.category||''}`.toLowerCase().includes(q))
+        .sort((a,b)=> (a.deadline||'9999-99-99').localeCompare(b.deadline||'9999-99-99'));
+
+      return `
+        <div class="space-y-4 md:space-y-6 fade-in">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Curto/médio/longo prazo • subtarefas • timeline</div>
+              <div class="text-xl font-semibold">Gestão de Metas</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btnAddGoal" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm inline-flex items-center gap-2">${Icons.plus('w-4 h-4')} Nova meta</button>
+              <div class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl soft-border bg-white/30 dark:bg-slate-950/20 text-sm">
+                <span class="opacity-70">${Icons.search('w-4 h-4')}</span>
+                <input id="goalsSearch" class="bg-transparent outline-none w-64" placeholder="Buscar metas..." value="${escapeAttr(state.search.tasks||'')}" />
+              </div>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-3 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-4 md:p-5 lg:col-span-2">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Timeline</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Acompanhe prazos e marcos</div>
+                </div>
+              </div>
+              <div class="mt-4 space-y-3">
+                ${goals.length ? goals.map(goalTimelineItem).join('') : emptyState('Sem metas', 'Crie uma meta com prazo e subtarefas.')}
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold">Resumo</div>
+              <div class="mt-3 grid gap-2">
+                ${goalsSummary(goals)}
+              </div>
+              <div class="mt-4">
+                <canvas id="chartGoalsCat" height="160"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass2 rounded-3xl p-4 md:p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-semibold">Metas (cards)</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">Progresso manual ou automático por tarefas vinculadas</div>
+              </div>
+            </div>
+            <div class="mt-3 grid md:grid-cols-2 xl:grid-cols-3 gap-2">
+              ${goals.length ? goals.map(goalCard).join('') : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function goalsSummary(goals) {
+      const avg = goals.length ? Math.round(goals.reduce((s,g)=> s + computeGoalProgress(g), 0)/goals.length) : 0;
+      const due30 = goals.filter(g => g.deadline && new Date(g.deadline) <= addDays(new Date(), 30)).length;
+      const done = goals.filter(g => computeGoalProgress(g) >= 100).length;
+      return `
+        ${miniStat('Progresso médio', avg+'%')}
+        ${miniStat('Prazos (30d)', due30)}
+        ${miniStat('Concluídas', done)}
+      `;
+    }
+
+    function goalTimelineItem(g) {
+      const prog = computeGoalProgress(g);
+      const deadline = g.deadline ? fmt.dateHuman(g.deadline) : 'Sem prazo';
+      const ms = (g.milestones||[]);
+      const msDone = ms.filter(m=>m.done).length;
+      const msTotal = ms.length;
+      return `
+        <div class="rounded-3xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="font-semibold truncate">${escapeHtml(g.title)}</div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">${escapeHtml(g.category||'outros')} • ${deadline}</div>
+            </div>
+            <div class="flex items-center gap-1">
+              <button class="btnEditGoal p-2 rounded-xl soft-border hover:soft-bg" data-id="${g.id}">✎</button>
+              <button class="btnDelGoal p-2 rounded-xl soft-border hover:soft-bg" data-id="${g.id}">🗑</button>
+            </div>
+          </div>
+          <div class="mt-3">
+            <div class="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+              <span>Progresso</span>
+              <span class="font-semibold">${prog}%</span>
+            </div>
+            <div class="mt-2 w-full h-2 rounded-full bg-slate-200/60 dark:bg-slate-800/60 overflow-hidden">
+              <div class="h-full bg-cyan-600" style="width:${prog}%"></div>
+            </div>
+            <div class="mt-2 text-xs text-slate-500 dark:text-slate-400">Submetas: ${msDone}/${msTotal}${g.progressMode==='auto' ? ' • Auto (tarefas)' : ''}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function goalCard(g) {
+      const prog = computeGoalProgress(g);
+      const ms = (g.milestones||[]);
+      const msDone = ms.filter(m=>m.done).length;
+      const deadline = g.deadline || '';
+      return `
+        <div class="rounded-3xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-semibold truncate">${escapeHtml(g.title)}</div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">${escapeHtml(g.category||'outros')} ${deadline ? '• '+fmt.dateHuman(deadline) : ''}</div>
+            </div>
+            <button class="btnEditGoal px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" data-id="${g.id}">Gerenciar</button>
+          </div>
+          <div class="mt-3">
+            <div class="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+              <span>Progresso</span>
+              <span class="font-semibold">${prog}%</span>
+            </div>
+            <div class="mt-2 w-full h-2 rounded-full bg-slate-200/60 dark:bg-slate-800/60 overflow-hidden">
+              <div class="h-full bg-indigo-600" style="width:${prog}%"></div>
+            </div>
+          </div>
+          <div class="mt-3 text-xs text-slate-500 dark:text-slate-400">Marcos: ${msDone}/${ms.length}</div>
+        </div>
+      `;
+    }
+
+    function bindGoals() {
+      $('#btnAddGoal')?.addEventListener('click', () => openGoalModal());
+      $('#goalsSearch')?.addEventListener('input', (e) => { state.search.tasks = e.target.value; renderView(); });
+      $$('.btnEditGoal').forEach(b => b.addEventListener('click', () => openGoalModal(b.dataset.id)));
+      $$('.btnDelGoal').forEach(b => b.addEventListener('click', () => deleteGoal(b.dataset.id)));
+      renderGoalsCharts();
+    }
+
+    function renderGoalsCharts() {
+      const isDark = document.documentElement.classList.contains('dark');
+      const tickColor = isDark ? 'rgba(226,232,240,.75)' : 'rgba(30,41,59,.7)';
+
+      const byCat = {};
+      state.data.goals.forEach(g => { const c = g.category || 'outros'; byCat[c] = (byCat[c]||0) + 1; });
+      const labels = Object.keys(byCat);
+      const vals = Object.values(byCat);
+      const ctx = $('#chartGoalsCat');
+      if (!ctx) return;
+      state.charts.goalsCat = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: vals, backgroundColor: ['rgba(99,102,241,.75)','rgba(14,165,233,.75)','rgba(16,185,129,.75)','rgba(245,158,11,.75)','rgba(168,85,247,.75)','rgba(244,63,94,.75)','rgba(100,116,139,.75)'] }] },
+        options: {
+          plugins: { legend: { labels: { color: tickColor } } }
+        }
+      });
+    }
+
+    function openGoalModal(goalId=null) {
+      const g = goalId ? state.data.goals.find(x => x.id === goalId) : null;
+      const isEdit = !!g;
+      const tasks = state.data.tasks;
+
+      openModal({
+        title: isEdit ? 'Gerenciar meta' : 'Nova meta',
+        primaryText: isEdit ? 'Salvar' : 'Criar',
+        wide: true,
+        bodyHtml: `
+          <form id="goalForm" class="grid gap-4">
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Descrição
+                <input name="title" required class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(g?.title||'')}" placeholder="Ex: Construir portfólio" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Categoria
+                <select name="category" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  ${TASK_CATEGORIES.map(c => `<option ${g?.category===c?'selected':''} value="${c}">${c}</option>`).join('')}
+                </select>
+              </label>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Prazo
+                <input name="deadline" type="date" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(g?.deadline||'')}" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Modo de progresso
+                <select name="progressMode" id="progressMode" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  <option value="manual" ${g?.progressMode==='manual'?'selected':''}>Manual</option>
+                  <option value="auto" ${g?.progressMode==='auto'?'selected':''}>Automático (tarefas vinculadas)</option>
+                </select>
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Progresso (manual)
+                <input name="progress" type="range" min="0" max="100" value="${escapeAttr(String(g?.progress ?? 0))}" class="w-full" />
+                <div class="text-xs text-slate-500 dark:text-slate-400">0% a 100%</div>
+              </label>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-3">
+              <div class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-4">
+                <div class="flex items-center justify-between">
+                  <div class="font-semibold">Submetas</div>
+                  <button type="button" id="btnAddMilestone" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Adicionar</button>
+                </div>
+                <div id="milestonesList" class="mt-3 space-y-2"></div>
+              </div>
+
+              <div class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-4">
+                <div class="font-semibold">Vincular tarefas</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">Marque tarefas relacionadas para calcular progresso automático.</div>
+                <div class="mt-3 max-h-64 overflow-auto mini-scroll space-y-2">
+                  ${tasks.length ? tasks.map(t => {
+                    const checked = (g?.linkedTaskIds||[]).includes(t.id);
+                    return `
+                      <label class="flex items-start gap-3 rounded-2xl soft-border bg-white/20 dark:bg-slate-950/10 p-3 cursor-pointer">
+                        <input type="checkbox" name="linked" value="${t.id}" class="mt-1" ${checked?'checked':''}>
+                        <div class="min-w-0">
+                          <div class="text-sm font-semibold truncate">${escapeHtml(t.title)}</div>
+                          <div class="text-xs text-slate-500 dark:text-slate-400">${t.status} ${t.dueDate ? '• '+fmt.dateHuman(t.dueDate) : ''}</div>
+                        </div>
+                      </label>
+                    `;
+                  }).join('') : `<div class="text-sm text-slate-600 dark:text-slate-300">Nenhuma tarefa disponível.</div>`}
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-4">
+              <div class="font-semibold">Prévia</div>
+              <div class="mt-2 text-sm text-slate-600 dark:text-slate-300">Progresso calculado: <b id="goalComputed">${isEdit ? computeGoalProgress(g) : 0}%</b></div>
+            </div>
+          </form>
+        `,
+        onPrimary: (wrap) => {
+          const form = $('#goalForm', wrap);
+          const fd = new FormData(form);
+          const title = (fd.get('title')||'').toString().trim();
+          if (!title) { toast('Informe a descrição da meta.', 'warn'); return false; }
+
+          const progressMode = fd.get('progressMode')?.toString() || 'manual';
+          const linkedTaskIds = fd.getAll('linked').map(x => x.toString());
+
+          // milestones
+          const msEls = $$('.msItem', wrap);
+          const milestones = msEls.map(el => ({
+            id: el.dataset.mid || uid(),
+            title: ($('.msTitle', el)?.value || '').trim() || 'Submeta',
+            done: $('.msDone', el)?.checked || false
+          }));
+
+          const payload = {
+            title,
+            category: fd.get('category')?.toString() || 'outros',
+            deadline: fd.get('deadline')?.toString() || '',
+            progressMode,
+            progress: Number(fd.get('progress')||0),
+            milestones,
+            linkedTaskIds,
+            updatedAt: nowISO()
+          };
+
+          if (isEdit) {
+            Object.assign(g, payload);
+          } else {
+            state.data.goals.push({ id: uid(), ...payload, createdAt: nowISO() });
+          }
+
+          saveDataFor(state.user.id, state.data);
+          toast(isEdit ? 'Meta atualizada.' : 'Meta criada.', 'ok');
+          renderView();
+        }
+      });
+
+      // Initialize milestones list
+      const modal = $('.fixed.z-[60]');
+      if (!modal) return;
+      const list = $('#milestonesList', modal);
+      const ms = (g?.milestones || []);
+      list.innerHTML = (ms.length ? ms : [{id: uid(), title: 'Submeta 1', done: false}]).map(renderMilestoneItem).join('');
+
+      $('#btnAddMilestone', modal)?.addEventListener('click', () => {
+        list.insertAdjacentHTML('beforeend', renderMilestoneItem({id: uid(), title: '', done: false}));
+        bindMilestoneControls(modal);
+      });
+
+      bindMilestoneControls(modal);
+
+      // Update computed preview
+      const updateComputed = () => {
+        const fd = new FormData($('#goalForm', modal));
+        const mode = fd.get('progressMode')?.toString() || 'manual';
+        let computed = Number(fd.get('progress')||0);
+        if (mode === 'auto') {
+          const ids = fd.getAll('linked').map(x => x.toString());
+          const linked = state.data.tasks.filter(t => ids.includes(t.id));
+          computed = linked.length ? Math.round((linked.filter(t=>t.status==='done').length / linked.length) * 100) : 0;
+        }
+        $('#goalComputed', modal).textContent = computed + '%';
+      };
+
+      $('#progressMode', modal)?.addEventListener('change', updateComputed);
+      $$('input[name="linked"]', modal).forEach(el => el.addEventListener('change', updateComputed));
+      $('input[name="progress"]', modal)?.addEventListener('input', updateComputed);
+      updateComputed();
+    }
+
+    function renderMilestoneItem(m) {
+      return `
+        <div class="msItem flex items-center gap-2 rounded-2xl soft-border bg-white/20 dark:bg-slate-950/10 p-3" data-mid="${m.id}">
+          <input class="msDone" type="checkbox" ${m.done ? 'checked' : ''}>
+          <input class="msTitle flex-1 bg-transparent outline-none text-sm" value="${escapeAttr(m.title||'')}" placeholder="Submeta...">
+          <button type="button" class="btnDelMs px-2 py-1 rounded-xl soft-border hover:soft-bg text-xs">Remover</button>
+        </div>
+      `;
+    }
+
+    function bindMilestoneControls(modal) {
+      $$('.btnDelMs', modal).forEach(btn => {
+        btn.onclick = () => btn.closest('.msItem')?.remove();
+      });
+    }
+
+    async function deleteGoal(id) {
+      const g = state.data.goals.find(x => x.id === id);
+      if (!g) return;
+      const ok = await confirmModal({
+        title: 'Excluir meta',
+        message: `Excluir “<b>${escapeHtml(g.title)}</b>”?`,
+        danger: true,
+        confirmText: 'Excluir'
+      });
+      if (!ok) return;
+      state.data.goals = state.data.goals.filter(x => x.id !== id);
+      saveDataFor(state.user.id, state.data);
+      toast('Meta excluída.', 'ok');
+      renderView();
+    }
+
+    // -------------------------
+    // Calendar
+    // -------------------------
+    function renderCalendar() {
+      const ui = state.data.ui;
+      const view = ui.calendarView || 'mês';
+      const focus = state.calendar.focusMonth;
+
+      return `
+        <div class="space-y-4 md:space-y-6 fade-in">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Dia/Semana/Mês • eventos com lembretes • integração básica</div>
+              <div class="text-xl font-semibold">Agenda / Calendário</div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="btnAddEvent" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm inline-flex items-center gap-2">${Icons.plus('w-4 h-4')} Novo evento</button>
+              <div class="flex items-center gap-1 rounded-xl soft-border p-1 bg-white/25 dark:bg-slate-950/20">
+                ${['dia','semana','mês'].map(v => `<button class="calView px-3 py-2 rounded-xl text-sm ${view===v ? 'bg-indigo-600 text-white' : 'hover:soft-bg'}" data-view="${v}">${v}</button>`).join('')}
+              </div>
+              <div class="flex items-center gap-1">
+                <button id="btnCalPrev" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">←</button>
+                <button id="btnCalToday" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Hoje</button>
+                <button id="btnCalNext" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">→</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass2 rounded-3xl p-4 md:p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-semibold">${view === 'mês' ? focus.toLocaleDateString('pt-BR', { month:'long', year:'numeric' }) : new Date().toLocaleDateString('pt-BR', { month:'long', year:'numeric' })}</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">Clique em um dia para criar evento • tarefas e hábitos aparecem como marcadores</div>
+              </div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">Lembretes: in-app</div>
+            </div>
+
+            <div class="mt-4">
+              ${view === 'mês' ? renderCalendarMonth(focus) : (view === 'semana' ? renderCalendarWeek(new Date()) : renderCalendarDay(new Date()))}
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-2 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold">Próximos eventos</div>
+              <div class="mt-3 space-y-2">
+                ${upcomingEvents(14).length ? upcomingEvents(14).slice(0,10).map(evListRow).join('') : emptyState('Nada agendado', 'Adicione eventos e lembretes para manter o controle.')}
+              </div>
+            </div>
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold">Integração rápida</div>
+              <div class="mt-3 grid gap-2">
+                ${calendarIntegrationCard()}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCalendarMonth(focusMonth) {
+      const d = new Date(focusMonth);
+      d.setDate(1);
+      const startDay = d.getDay();
+      const start = addDays(d, -startDay);
+      const cells = [...Array(42)].map((_,i) => addDays(start, i));
+      const monthKey = fmt.monthKey(focusMonth);
+      const week = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+      const tasksByDay = {};
+      state.data.tasks.forEach(t => { if (t.dueDate) tasksByDay[t.dueDate] = (tasksByDay[t.dueDate]||0) + (t.status==='done'?0:1); });
+      const eventsByDay = {};
+      state.data.events.forEach(ev => {
+        const iso = fmt.dateISO(ev.startAt);
+        eventsByDay[iso] = (eventsByDay[iso]||0) + 1;
+      });
+      const habitsByDay = {};
+      state.data.habits.forEach(h => (h.history||[]).forEach(day => { habitsByDay[day] = (habitsByDay[day]||0) + 1; }));
+
+      return `
+        <div class="grid grid-cols-7 gap-2">
+          ${week.map(w => `<div class="text-[11px] text-slate-500 dark:text-slate-400 px-1">${w}</div>`).join('')}
+          ${cells.map(day => {
+            const iso = fmt.dateISO(day);
+            const inMonth = fmt.monthKey(day) === monthKey;
+            const isToday = iso === fmt.dateISO(new Date());
+            const e = eventsByDay[iso] || 0;
+            const t = tasksByDay[iso] || 0;
+            const h = habitsByDay[iso] || 0;
+
+            const pills = [
+              e ? `<span class="text-[10px] px-2 py-1 rounded-full bg-indigo-600/10 text-indigo-700 dark:text-indigo-300 border border-indigo-600/20">${e} ev</span>` : '',
+              t ? `<span class="text-[10px] px-2 py-1 rounded-full bg-amber-600/10 text-amber-700 dark:text-amber-300 border border-amber-600/20">${t} tarefas</span>` : '',
+              h ? `<span class="text-[10px] px-2 py-1 rounded-full bg-emerald-600/10 text-emerald-700 dark:text-emerald-300 border border-emerald-600/20">${h} hábitos</span>` : ''
+            ].filter(Boolean).join(' ');
+
+            return `
+              <button class="btnMonthDay rounded-2xl soft-border ${inMonth ? 'bg-white/25 dark:bg-slate-950/15' : 'bg-white/10 dark:bg-slate-950/10 opacity-70'} p-3 text-left hover:soft-bg transition" data-day="${iso}">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm ${isToday ? 'font-semibold text-indigo-600 dark:text-indigo-300' : ''}">${day.getDate()}</div>
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400">${isToday ? 'hoje' : ''}</div>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1">${pills || '<span class="text-[11px] text-slate-500 dark:text-slate-400">—</span>'}</div>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function renderCalendarWeek(baseDate) {
+      const start = startOfDay(baseDate);
+      const dow = start.getDay();
+      const weekStart = addDays(start, -dow);
+      const days = [...Array(7)].map((_,i)=> addDays(weekStart, i));
+      return `
+        <div class="grid md:grid-cols-2 gap-3">
+          ${days.map(d => {
+            const iso = fmt.dateISO(d);
+            const evs = state.data.events.filter(ev => fmt.dateISO(ev.startAt) === iso).sort((a,b)=> new Date(a.startAt)-new Date(b.startAt));
+            const tasks = state.data.tasks.filter(t => t.dueDate === iso && t.status !== 'done');
+            const habits = state.data.habits.filter(h => (h.history||[]).includes(iso));
+            return `
+              <div class="rounded-3xl soft-border bg-white/25 dark:bg-slate-950/15 p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="font-semibold">${d.toLocaleDateString('pt-BR', { weekday:'long' })}</div>
+                    <div class="text-sm text-slate-600 dark:text-slate-300">${fmt.dateHuman(iso)}</div>
+                  </div>
+                  <button class="btnAddEventDay px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" data-day="${iso}">+ Evento</button>
+                </div>
+                <div class="mt-3 space-y-2">
+                  ${evs.slice(0,4).map(evListRow).join('') || '<div class="text-sm text-slate-600 dark:text-slate-300">Sem eventos.</div>'}
+                </div>
+                <div class="mt-4 grid sm:grid-cols-2 gap-2">
+                  <div class="rounded-2xl soft-border bg-white/20 dark:bg-slate-950/10 p-3">
+                    <div class="text-xs text-slate-500 dark:text-slate-400">Tarefas</div>
+                    <div class="mt-1 font-semibold">${tasks.length}</div>
+                  </div>
+                  <div class="rounded-2xl soft-border bg-white/20 dark:bg-slate-950/10 p-3">
+                    <div class="text-xs text-slate-500 dark:text-slate-400">Hábitos feitos</div>
+                    <div class="mt-1 font-semibold">${habits.length}</div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function renderCalendarDay(day) {
+      const iso = fmt.dateISO(day);
+      const evs = state.data.events.filter(ev => fmt.dateISO(ev.startAt) === iso).sort((a,b)=> new Date(a.startAt)-new Date(b.startAt));
+      const tasks = state.data.tasks.filter(t => t.dueDate === iso);
+      const habitsDone = state.data.habits.filter(h => (h.history||[]).includes(iso));
+      const habitsDue = habitsDueToday(); // for today (simple)
+      return `
+        <div class="grid lg:grid-cols-3 gap-4">
+          <div class="lg:col-span-2 rounded-3xl soft-border bg-white/25 dark:bg-slate-950/15 p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-semibold">${day.toLocaleDateString('pt-BR', { weekday:'long' })}</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">${fmt.dateHuman(iso)}</div>
+              </div>
+              <button class="btnAddEventDay px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm" data-day="${iso}">+ Evento</button>
+            </div>
+            <div class="mt-3 space-y-2">
+              ${evs.length ? evs.map(evListRow).join('') : emptyState('Sem eventos no dia', 'Adicione um evento com horário, local e lembrete.')}
+            </div>
+          </div>
+
+          <div class="rounded-3xl soft-border bg-white/25 dark:bg-slate-950/15 p-4 space-y-3">
+            <div>
+              <div class="font-semibold">Tarefas do dia</div>
+              <div class="mt-2 space-y-2">
+                ${tasks.length ? tasks.map(taskRowMini).join('') : '<div class="text-sm text-slate-600 dark:text-slate-300">Sem tarefas.</div>'}
+              </div>
+            </div>
+            <div>
+              <div class="font-semibold">Hábitos</div>
+              <div class="mt-2 text-sm text-slate-600 dark:text-slate-300">Feitos: <b>${habitsDone.length}</b> • Devidos (hoje): <b>${habitsDue.length}</b></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function evListRow(ev) {
+      return `
+        <div class="flex items-start justify-between gap-2 px-3 py-2 rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20">
+          <div class="min-w-0">
+            <div class="font-semibold truncate">${escapeHtml(ev.title)}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">${fmt.datetimeHuman(ev.startAt)}${ev.location ? ' • ' + escapeHtml(ev.location) : ''}${ev.reminderMin ? ' • 🔔 ' + ev.reminderMin + 'm' : ''}</div>
+            ${ev.desc ? `<div class="mt-1 text-xs text-slate-600 dark:text-slate-300">${escapeHtml(ev.desc)}</div>` : ''}
+          </div>
+          <div class="flex items-center gap-1">
+            <button class="btnEditEvent p-2 rounded-xl soft-border hover:soft-bg" data-id="${ev.id}">✎</button>
+            <button class="btnDelEvent p-2 rounded-xl soft-border hover:soft-bg" data-id="${ev.id}">🗑</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function calendarIntegrationCard() {
+      const today = fmt.dateISO(new Date());
+      const tasksToday = state.data.tasks.filter(t => t.dueDate === today && t.status !== 'done').length;
+      const eventsToday = state.data.events.filter(e => fmt.dateISO(e.startAt) === today).length;
+      const habitsDoneToday = state.data.habits.reduce((s,h)=> s + ((h.history||[]).includes(today) ? 1 : 0), 0);
+      return `
+        <div class="rounded-3xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+          <div class="font-semibold">Resumo de hoje</div>
+          <div class="mt-2 grid grid-cols-3 gap-2">
+            ${miniStat('Eventos', eventsToday)}
+            ${miniStat('Tarefas', tasksToday)}
+            ${miniStat('Hábitos', habitsDoneToday)}
+          </div>
+          <div class="mt-3 text-sm text-slate-600 dark:text-slate-300">Use a Home para um painel rápido do dia.</div>
+        </div>
+      `;
+    }
+
+    function bindCalendar() {
+      $('#btnAddEvent')?.addEventListener('click', () => openEventModal());
+
+      $$('.calView').forEach(b => b.addEventListener('click', () => {
+        state.data.ui.calendarView = b.dataset.view;
+        saveDataFor(state.user.id, state.data);
+        renderView();
+      }));
+
+      $('#btnCalPrev')?.addEventListener('click', () => {
+        const v = state.data.ui.calendarView || 'mês';
+        if (v === 'mês') {
+          const d = new Date(state.calendar.focusMonth); d.setMonth(d.getMonth()-1); state.calendar.focusMonth = d;
+        }
+        renderView();
+      });
+      $('#btnCalNext')?.addEventListener('click', () => {
+        const v = state.data.ui.calendarView || 'mês';
+        if (v === 'mês') {
+          const d = new Date(state.calendar.focusMonth); d.setMonth(d.getMonth()+1); state.calendar.focusMonth = d;
+        }
+        renderView();
+      });
+      $('#btnCalToday')?.addEventListener('click', () => {
+        state.calendar.focusMonth = new Date();
+        renderView();
+      });
+
+      $$('.btnMonthDay').forEach(b => b.addEventListener('click', () => openEventModal(null, b.dataset.day)));
+      $$('.btnAddEventDay').forEach(b => b.addEventListener('click', () => openEventModal(null, b.dataset.day)));
+
+      $$('.btnEditEvent').forEach(b => b.addEventListener('click', () => openEventModal(b.dataset.id)));
+      $$('.btnDelEvent').forEach(b => b.addEventListener('click', () => deleteEvent(b.dataset.id)));
+    }
+
+    function openEventModal(eventId=null, prefillDayIso=null) {
+      const ev = eventId ? state.data.events.find(x => x.id === eventId) : null;
+      const isEdit = !!ev;
+
+      const baseStart = ev?.startAt ? new Date(ev.startAt) : (() => {
+        const d = prefillDayIso ? new Date(prefillDayIso) : new Date();
+        d.setHours(9,0,0,0);
+        return d;
+      })();
+      const baseEnd = ev?.endAt ? new Date(ev.endAt) : new Date(baseStart.getTime() + 45*60000);
+
+      const startVal = baseStart.toISOString().slice(0,16);
+      const endVal = baseEnd.toISOString().slice(0,16);
+
+      openModal({
+        title: isEdit ? 'Editar evento' : 'Novo evento',
+        primaryText: isEdit ? 'Salvar' : 'Criar',
+        bodyHtml: `
+          <form id="eventForm" class="grid gap-3">
+            <label class="text-xs text-slate-600 dark:text-slate-300">Título
+              <input name="title" required class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(ev?.title||'')}" placeholder="Ex: Reunião" />
+            </label>
+
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Início
+                <input name="start" type="datetime-local" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(startVal)}" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Fim
+                <input name="end" type="datetime-local" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(endVal)}" />
+              </label>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Local
+                <input name="location" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(ev?.location||'')}" placeholder="Opcional" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Lembrete
+                <select name="reminder" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  ${[0,5,10,15,30,60].map(m => `<option value="${m}" ${Number(ev?.reminderMin||0)===m?'selected':''}>${m===0?'Sem lembrete':m+' min antes'}</option>`).join('')}
+                </select>
+              </label>
+            </div>
+
+            <label class="text-xs text-slate-600 dark:text-slate-300">Descrição
+              <textarea name="desc" rows="3" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" placeholder="Opcional">${escapeHtml(ev?.desc||'')}</textarea>
+            </label>
+          </form>
+        `,
+        onPrimary: (wrap) => {
+          const form = $('#eventForm', wrap);
+          const fd = new FormData(form);
+          const title = (fd.get('title')||'').toString().trim();
+          if (!title) { toast('Informe o título do evento.', 'warn'); return false; }
+
+          const startAt = new Date(fd.get('start')).toISOString();
+          const endAt = new Date(fd.get('end')).toISOString();
+          const payload = {
+            title,
+            startAt,
+            endAt,
+            location: (fd.get('location')||'').toString().trim(),
+            desc: (fd.get('desc')||'').toString().trim(),
+            reminderMin: Number(fd.get('reminder')||0),
+            updatedAt: nowISO()
+          };
+
+          if (isEdit) Object.assign(ev, payload);
+          else state.data.events.push({ id: uid(), ...payload, createdAt: nowISO() });
+
+          saveDataFor(state.user.id, state.data);
+          scheduleReminders();
+          toast(isEdit ? 'Evento atualizado.' : 'Evento criado.', 'ok');
+          renderView();
+        }
+      });
+    }
+
+    async function deleteEvent(id) {
+      const ev = state.data.events.find(x => x.id === id);
+      if (!ev) return;
+      const ok = await confirmModal({
+        title: 'Excluir evento',
+        message: `Excluir “<b>${escapeHtml(ev.title)}</b>”?`,
+        danger: true,
+        confirmText: 'Excluir'
+      });
+      if (!ok) return;
+      state.data.events = state.data.events.filter(x => x.id !== id);
+      saveDataFor(state.user.id, state.data);
+      scheduleReminders();
+      toast('Evento excluído.', 'ok');
+      renderView();
+    }
+
+    // -------------------------
+    // Finance
+    // -------------------------
+    const FIN_CATS = ['fixas','variáveis','lazer','alimentação','moradia','transporte','saúde','educação','assinaturas','outros','salário','freelance'];
+
+    function renderFinance() {
+      const monthKey = fmt.monthKey(new Date());
+      const tx = [...state.data.transactions].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+
+      const txMonth = tx.filter(t => fmt.monthKey(t.date) === monthKey);
+      const income = txMonth.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount||0),0);
+      const expense = txMonth.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount||0),0);
+      const saved = income - expense;
+      const budget = Number(state.data.meta.budgetMonth || 0);
+      const pct = budget ? clamp((expense/budget)*100,0,200) : 0;
+      const alert = budget && expense > budget;
+
+      return `
+        <div class="space-y-4 md:space-y-6 fade-in">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Receitas • despesas • alertas • gráficos</div>
+              <div class="text-xl font-semibold">Controle Financeiro</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btnAddTx" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm inline-flex items-center gap-2">${Icons.plus('w-4 h-4')} Nova transação</button>
+              <button id="btnBudget" class="px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Orçamento</button>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-4 gap-3">
+            ${kpiMoney('Receitas (mês)', income, 'Entradas do mês')}
+            ${kpiMoney('Gastos (mês)', expense, alert ? 'Acima do orçamento' : 'Dentro do previsto', alert ? 'warn' : 'ok')}
+            ${kpiMoney('Economia (mês)', saved, saved >= 0 ? 'Saldo positivo' : 'Saldo negativo', saved >= 0 ? 'ok' : 'warn')}
+            <div class="glass2 rounded-3xl p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Orçamento</div>
+              <div class="mt-2 text-lg font-semibold">${fmt.money(budget)}</div>
+              <div class="mt-2 w-full h-2 rounded-full bg-slate-200/60 dark:bg-slate-800/60 overflow-hidden">
+                <div class="h-full ${alert ? 'bg-rose-600' : 'bg-amber-600'}" style="width:${clamp(pct,0,100)}%"></div>
+              </div>
+              <div class="mt-2 text-xs text-slate-600 dark:text-slate-300">Uso: ${Math.round(pct)}%</div>
+            </div>
+          </div>
+
+          ${alert ? `<div class="rounded-3xl soft-border bg-rose-600/10 text-rose-800 dark:text-rose-200 border-rose-600/20 p-4">
+            <div class="font-semibold">Alerta de gastos excessivos</div>
+            <div class="text-sm">Você ultrapassou o orçamento mensal. Revise categorias e reduza despesas variáveis.</div>
+          </div>` : ''}
+
+          <div class="grid lg:grid-cols-2 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Gastos por categoria (mês)</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Pizza</div>
+                </div>
+              </div>
+              <div class="mt-3"><canvas id="chartFinancePie" height="180"></canvas></div>
+            </div>
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-semibold">Comparação mês a mês</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">Barras (últimos 6 meses)</div>
+                </div>
+              </div>
+              <div class="mt-3"><canvas id="chartFinanceBars" height="180"></canvas></div>
+            </div>
+          </div>
+
+          <div class="glass2 rounded-3xl p-4 md:p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-semibold">Transações</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">Clique para editar</div>
+              </div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">${tx.length} itens</div>
+            </div>
+            <div class="mt-3 overflow-auto mini-scroll">
+              <table class="w-full text-sm">
+                <thead class="text-xs text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th class="text-left py-2">Data</th>
+                    <th class="text-left py-2">Tipo</th>
+                    <th class="text-left py-2">Categoria</th>
+                    <th class="text-left py-2">Nota</th>
+                    <th class="text-right py-2">Valor</th>
+                    <th class="text-right py-2">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${tx.length ? tx.map(txRow).join('') : `<tr><td colspan="6" class="py-6"><div class="text-slate-600 dark:text-slate-300">Sem transações.</div></td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function kpiMoney(title, amount, hint, kind='info') {
+      const color = {
+        info: 'text-slate-900 dark:text-slate-100',
+        ok: 'text-emerald-700 dark:text-emerald-300',
+        warn: 'text-amber-700 dark:text-amber-300'
+      }[kind] || 'text-slate-900 dark:text-slate-100';
+      return `
+        <div class="glass2 rounded-3xl p-4">
+          <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">${title}</div>
+          <div class="mt-2 text-lg font-semibold ${color}">${fmt.money(amount)}</div>
+          <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">${hint}</div>
+        </div>
+      `;
+    }
+
+    function txRow(t) {
+      const isExp = t.type === 'expense';
+      return `
+        <tr class="border-t border-slate-200/50 dark:border-slate-700/40">
+          <td class="py-3 text-slate-600 dark:text-slate-300">${fmt.dateHuman(t.date)}</td>
+          <td class="py-3"><span class="text-[11px] px-2 py-1 rounded-full border ${isExp ? 'bg-rose-600/10 text-rose-700 dark:text-rose-300 border-rose-600/20' : 'bg-emerald-600/10 text-emerald-700 dark:text-emerald-300 border-emerald-600/20'}">${isExp ? 'despesa' : 'receita'}</span></td>
+          <td class="py-3">${escapeHtml(t.category||'outros')}</td>
+          <td class="py-3 text-slate-600 dark:text-slate-300">${escapeHtml(t.note||'—')}</td>
+          <td class="py-3 text-right font-semibold ${isExp ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'}">${fmt.money(t.amount)}</td>
+          <td class="py-3 text-right">
+            <button class="btnEditTx px-3 py-2 rounded-xl soft-border hover:soft-bg text-xs" data-id="${t.id}">Editar</button>
+            <button class="btnDelTx px-3 py-2 rounded-xl soft-border hover:soft-bg text-xs" data-id="${t.id}">Excluir</button>
+          </td>
+        </tr>
+      `;
+    }
+
+    function bindFinance() {
+      $('#btnAddTx')?.addEventListener('click', () => openTransactionModal());
+      $('#btnBudget')?.addEventListener('click', () => openBudgetModal());
+      $$('.btnEditTx').forEach(b => b.addEventListener('click', () => openTransactionModal(b.dataset.id)));
+      $$('.btnDelTx').forEach(b => b.addEventListener('click', () => deleteTransaction(b.dataset.id)));
+      renderFinanceCharts();
+    }
+
+    function renderFinanceCharts() {
+      const isDark = document.documentElement.classList.contains('dark');
+      const gridColor = isDark ? 'rgba(148,163,184,.18)' : 'rgba(15,23,42,.08)';
+      const tickColor = isDark ? 'rgba(226,232,240,.75)' : 'rgba(30,41,59,.7)';
+
+      const monthKey = fmt.monthKey(new Date());
+      const txMonth = state.data.transactions.filter(tx => fmt.monthKey(tx.date) === monthKey);
+      const expenses = txMonth.filter(t => t.type === 'expense');
+      const byCat = {};
+      expenses.forEach(t => { const c = t.category || 'outros'; byCat[c] = (byCat[c]||0) + Number(t.amount||0); });
+      const labels = Object.keys(byCat);
+      const vals = Object.values(byCat);
+      const ctxPie = $('#chartFinancePie');
+      if (ctxPie) {
+        state.charts.financePie = new Chart(ctxPie, {
+          type: 'pie',
+          data: { labels, datasets: [{ data: vals, backgroundColor: palette(vals.length) }] },
+          options: { plugins: { legend: { labels: { color: tickColor } } } }
+        });
+      }
+
+      const months = [...Array(6)].map((_,i) => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - (5-i));
+        return fmt.monthKey(d);
+      });
+      const labels2 = months.map(m => {
+        const [y,mm] = m.split('-');
+        return `${mm}/${y.slice(2)}`;
+      });
+      const expByMonth = months.map(m => state.data.transactions.filter(t => t.type==='expense' && fmt.monthKey(t.date)===m).reduce((s,t)=>s+Number(t.amount||0),0));
+      const incByMonth = months.map(m => state.data.transactions.filter(t => t.type==='income' && fmt.monthKey(t.date)===m).reduce((s,t)=>s+Number(t.amount||0),0));
+
+      const ctxBars = $('#chartFinanceBars');
+      if (ctxBars) {
+        state.charts.financeBars = new Chart(ctxBars, {
+          type: 'bar',
+          data: {
+            labels: labels2,
+            datasets: [
+              { label: 'Despesas', data: expByMonth, backgroundColor: 'rgba(244,63,94,.55)', borderRadius: 10 },
+              { label: 'Receitas', data: incByMonth, backgroundColor: 'rgba(16,185,129,.55)', borderRadius: 10 }
+            ]
+          },
+          options: {
+            plugins: { legend: { labels: { color: tickColor } } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: tickColor } },
+              y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, callback: v => 'R$ ' + Number(v).toLocaleString('pt-BR') } }
+            }
+          }
+        });
+      }
+    }
+
+    function palette(n) {
+      const base = [
+        'rgba(99,102,241,.75)',
+        'rgba(14,165,233,.75)',
+        'rgba(16,185,129,.75)',
+        'rgba(245,158,11,.75)',
+        'rgba(168,85,247,.75)',
+        'rgba(244,63,94,.75)',
+        'rgba(100,116,139,.75)',
+        'rgba(34,197,94,.75)',
+        'rgba(59,130,246,.75)',
+        'rgba(234,179,8,.75)'
+      ];
+      return [...Array(n)].map((_,i)=> base[i%base.length]);
+    }
+
+    function openBudgetModal() {
+      const current = Number(state.data.meta.budgetMonth || 0);
+      openModal({
+        title: 'Orçamento mensal',
+        primaryText: 'Salvar',
+        bodyHtml: `
+          <div class="grid gap-3">
+            <label class="text-xs text-slate-600 dark:text-slate-300">Defina um teto para alertas
+              <input id="budgetInput" type="number" min="0" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(String(current))}" />
+            </label>
+            <div class="text-sm text-slate-600 dark:text-slate-300">Dica: use o módulo Finanças para acompanhar categorias e tendência.</div>
+          </div>
+        `,
+        onPrimary: (wrap) => {
+          const v = Number($('#budgetInput', wrap).value || 0);
+          state.data.meta.budgetMonth = Math.max(0, v);
+          saveDataFor(state.user.id, state.data);
+          toast('Orçamento atualizado.', 'ok');
+          renderView();
+        }
+      });
+    }
+
+    function openTransactionModal(txId=null) {
+      const t = txId ? state.data.transactions.find(x => x.id === txId) : null;
+      const isEdit = !!t;
+      const date = t?.date || fmt.dateISO(new Date());
+
+      openModal({
+        title: isEdit ? 'Editar transação' : 'Nova transação',
+        primaryText: isEdit ? 'Salvar' : 'Criar',
+        bodyHtml: `
+          <form id="txForm" class="grid gap-3">
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Tipo
+                <select name="type" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  <option value="expense" ${t?.type==='expense'?'selected':''}>Despesa</option>
+                  <option value="income" ${t?.type==='income'?'selected':''}>Receita</option>
+                </select>
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Valor
+                <input name="amount" type="number" min="0" step="0.01" required class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(String(t?.amount ?? ''))}" placeholder="0,00" />
+              </label>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Categoria
+                <select name="category" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  ${FIN_CATS.map(c => `<option ${t?.category===c?'selected':''} value="${c}">${c}</option>`).join('')}
+                </select>
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Data
+                <input name="date" type="date" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(date)}" />
+              </label>
+            </div>
+
+            <label class="text-xs text-slate-600 dark:text-slate-300">Nota
+              <input name="note" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(t?.note||'')}" placeholder="Opcional" />
+            </label>
+          </form>
+        `,
+        onPrimary: (wrap) => {
+          const fd = new FormData($('#txForm', wrap));
+          const amount = Number(fd.get('amount')||0);
+          if (!(amount > 0)) { toast('Informe um valor maior que 0.', 'warn'); return false; }
+
+          const payload = {
+            type: fd.get('type')?.toString() || 'expense',
+            amount,
+            category: fd.get('category')?.toString() || 'outros',
+            date: fd.get('date')?.toString() || fmt.dateISO(new Date()),
+            note: fd.get('note')?.toString() || '',
+          };
+
+          if (isEdit) Object.assign(t, payload);
+          else state.data.transactions.push({ id: uid(), ...payload, createdAt: nowISO() });
+
+          saveDataFor(state.user.id, state.data);
+          toast(isEdit ? 'Transação atualizada.' : 'Transação criada.', 'ok');
+          renderView();
+        }
+      });
+    }
+
+    async function deleteTransaction(id) {
+      const t = state.data.transactions.find(x => x.id === id);
+      if (!t) return;
+      const ok = await confirmModal({
+        title: 'Excluir transação',
+        message: `Excluir transação de <b>${fmt.money(t.amount)}</b> (${escapeHtml(t.category||'outros')})?`,
+        danger: true,
+        confirmText: 'Excluir'
+      });
+      if (!ok) return;
+      state.data.transactions = state.data.transactions.filter(x => x.id !== id);
+      saveDataFor(state.user.id, state.data);
+      toast('Transação excluída.', 'ok');
+      renderView();
+    }
+
+    // -------------------------
+    // Notes & Diary
+    // -------------------------
+    function renderNotes() {
+      const ui = state.data.ui;
+      const tab = ui.notesTab || 'notas';
+      const q = (state.search.notes || '').toLowerCase();
+
+      const notes = [...state.data.notes]
+        .filter(n => !q || `${n.title} ${(n.tags||[]).join(' ')} ${stripHtml(n.contentHtml||'')}`.toLowerCase().includes(q))
+        .sort((a,b)=> (b.updatedAt||b.createdAt||'').localeCompare(a.updatedAt||a.createdAt||''));
+
+      const diary = [...state.data.diary]
+        .filter(d => !q || `${d.date} ${stripHtml(d.contentHtml||'')}`.toLowerCase().includes(q))
+        .sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+
+      return `
+        <div class="space-y-4 md:space-y-6 fade-in">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Rich text • tags • busca e filtros</div>
+              <div class="text-xl font-semibold">Notas e Diário</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="flex items-center gap-1 rounded-xl soft-border p-1 bg-white/25 dark:bg-slate-950/20">
+                <button class="notesTab px-3 py-2 rounded-xl text-sm ${tab==='notas' ? 'bg-indigo-600 text-white' : 'hover:soft-bg'}" data-tab="notas">Notas</button>
+                <button class="notesTab px-3 py-2 rounded-xl text-sm ${tab==='diario' ? 'bg-indigo-600 text-white' : 'hover:soft-bg'}" data-tab="diario">Diário</button>
+              </div>
+              <button id="btnAddNote" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm inline-flex items-center gap-2">${Icons.plus('w-4 h-4')} ${tab==='diario' ? 'Nova entrada' : 'Nova nota'}</button>
+            </div>
+          </div>
+
+          <div class="glass2 rounded-3xl p-4 md:p-5">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <div class="font-semibold">${tab==='diario' ? 'Entradas' : 'Notas'}</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">Clique para abrir e editar</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 px-3 py-2 rounded-xl soft-border bg-white/30 dark:bg-slate-950/20 text-sm">
+                  <span class="opacity-70">${Icons.search('w-4 h-4')}</span>
+                  <input id="notesSearch" class="bg-transparent outline-none w-72" placeholder="Buscar..." value="${escapeAttr(state.search.notes||'')}" />
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 grid lg:grid-cols-3 gap-3">
+              <div class="lg:col-span-1 rounded-3xl soft-border bg-white/25 dark:bg-slate-950/15 p-3 max-h-[64vh] overflow-auto mini-scroll">
+                <div class="space-y-2">
+                  ${tab==='diario'
+                    ? (diary.length ? diary.map(diaryListItem).join('') : emptyState('Sem entradas', 'Registre humor, clima e reflexões.'))
+                    : (notes.length ? notes.map(noteListItem).join('') : emptyState('Sem notas', 'Crie notas rápidas e organize com tags.'))
+                  }
+                </div>
+              </div>
+              <div class="lg:col-span-2 rounded-3xl soft-border bg-white/25 dark:bg-slate-950/15 p-4" id="notesPreview">
+                ${tab==='diario'
+                  ? (diary[0] ? diaryPreview(diary[0]) : emptyState('Selecione uma entrada', 'Ou crie uma nova.'))
+                  : (notes[0] ? notePreview(notes[0]) : emptyState('Selecione uma nota', 'Ou crie uma nova.'))
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function noteListItem(n) {
+      const tags = (n.tags||[]).slice(0,3);
+      return `
+        <button class="btnOpenNote w-full text-left rounded-3xl soft-border bg-white/20 dark:bg-slate-950/10 p-3 hover:soft-bg transition" data-id="${n.id}">
+          <div class="font-semibold truncate">${escapeHtml(n.title||'Sem título')}</div>
+          <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">Atualizada: ${fmt.datetimeHuman(n.updatedAt||n.createdAt)}</div>
+          <div class="mt-2 flex flex-wrap gap-1">
+            ${tags.map(t => `<span class="text-[10px] px-2 py-1 rounded-full soft-border bg-white/15 dark:bg-slate-950/10">#${escapeHtml(t)}</span>`).join('')}
+          </div>
+        </button>
+      `;
+    }
+
+    function diaryListItem(d) {
+      return `
+        <button class="btnOpenDiary w-full text-left rounded-3xl soft-border bg-white/20 dark:bg-slate-950/10 p-3 hover:soft-bg transition" data-id="${d.id}">
+          <div class="flex items-center justify-between">
+            <div class="font-semibold">${escapeHtml(d.date)}</div>
+            <div class="text-sm">${escapeHtml(d.mood||'')} ${escapeHtml(d.weather||'')}</div>
+          </div>
+          <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">Atualizada: ${fmt.datetimeHuman(d.updatedAt||d.createdAt)}</div>
+        </button>
+      `;
+    }
+
+    function notePreview(n) {
+      return `
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <div class="text-xl font-semibold truncate">${escapeHtml(n.title||'Sem título')}</div>
+            <div class="text-sm text-slate-600 dark:text-slate-300">Tags: ${(n.tags||[]).length ? (n.tags||[]).map(t=>`#${escapeHtml(t)}`).join(' ') : '—'}</div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button class="btnEditNote px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm" data-id="${n.id}">Editar</button>
+            <button class="btnDelNote px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" data-id="${n.id}">Excluir</button>
+          </div>
+        </div>
+        <div class="mt-4 prose-lite text-sm text-slate-800 dark:text-slate-100" id="noteHtml">${n.contentHtml||''}</div>
+      `;
+    }
+
+    function diaryPreview(d) {
+      return `
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="text-xl font-semibold">${escapeHtml(d.date)}</div>
+            <div class="text-sm text-slate-600 dark:text-slate-300">Humor: ${escapeHtml(d.mood||'')} • Clima: ${escapeHtml(d.weather||'')}</div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button class="btnEditDiary px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm" data-id="${d.id}">Editar</button>
+            <button class="btnDelDiary px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" data-id="${d.id}">Excluir</button>
+          </div>
+        </div>
+        <div class="mt-4 prose-lite text-sm text-slate-800 dark:text-slate-100">${d.contentHtml||''}</div>
+        ${d.attachments?.length ? `<div class="mt-4 text-sm"><div class="font-semibold">Anexos</div>${d.attachments.map(a=>`<a class="block" href="${escapeAttr(a)}" target="_blank" rel="noreferrer">${escapeHtml(a)}</a>`).join('')}</div>` : ''}
+      `;
+    }
+
+    function bindNotes() {
+      const ui = state.data.ui;
+
+      $$('.notesTab').forEach(b => b.addEventListener('click', () => {
+        ui.notesTab = b.dataset.tab;
+        saveDataFor(state.user.id, state.data);
+        renderView();
+      }));
+
+      $('#notesSearch')?.addEventListener('input', (e) => { state.search.notes = e.target.value; renderView(); });
+
+      $('#btnAddNote')?.addEventListener('click', () => {
+        if ((ui.notesTab||'notas') === 'diario') openDiaryModal();
+        else openNoteModal();
+      });
+
+      $$('.btnOpenNote').forEach(b => b.addEventListener('click', () => {
+        const n = state.data.notes.find(x => x.id === b.dataset.id);
+        $('#notesPreview').innerHTML = n ? notePreview(n) : emptyState('Não encontrado', '');
+        bindNotesPreview();
+      }));
+
+      $$('.btnOpenDiary').forEach(b => b.addEventListener('click', () => {
+        const d = state.data.diary.find(x => x.id === b.dataset.id);
+        $('#notesPreview').innerHTML = d ? diaryPreview(d) : emptyState('Não encontrado', '');
+        bindNotesPreview();
+      }));
+
+      bindNotesPreview();
+    }
+
+    function bindNotesPreview() {
+      $$('.btnEditNote').forEach(b => b.addEventListener('click', () => openNoteModal(b.dataset.id)));
+      $$('.btnDelNote').forEach(b => b.addEventListener('click', () => deleteNote(b.dataset.id)));
+      $$('.btnEditDiary').forEach(b => b.addEventListener('click', () => openDiaryModal(b.dataset.id)));
+      $$('.btnDelDiary').forEach(b => b.addEventListener('click', () => deleteDiary(b.dataset.id)));
+    }
+
+    function openNoteModal(noteId=null) {
+      const n = noteId ? state.data.notes.find(x => x.id === noteId) : null;
+      const isEdit = !!n;
+
+      openModal({
+        title: isEdit ? 'Editar nota' : 'Nova nota',
+        wide: true,
+        primaryText: isEdit ? 'Salvar' : 'Criar',
+        bodyHtml: `
+          <form id="noteForm" class="grid gap-3">
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Título
+                <input name="title" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(n?.title||'')}" placeholder="Sem título" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Tags (vírgula)
+                <input name="tags" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr((n?.tags||[]).join(', '))}" placeholder="ex: ideias, projeto" />
+              </label>
+            </div>
+            <div class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-3">
+              <div class="flex flex-wrap items-center gap-1">
+                ${rtButton('bold','Negrito','B')}
+                ${rtButton('italic','Itálico','I')}
+                ${rtButton('underline','Sublinhado','U')}
+                ${rtButton('insertUnorderedList','Lista','•')}
+                ${rtButton('insertOrderedList','Num','1.')}
+                <button type="button" class="rt px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" data-cmd="createLink">Link</button>
+                <button type="button" class="rt px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" data-cmd="removeFormat">Limpar</button>
+              </div>
+            </div>
+            <div class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-4">
+              <div id="noteEditor" contenteditable="true" class="min-h-[320px] outline-none prose-lite text-sm">${n?.contentHtml||'<p>Escreva aqui…</p>'}</div>
+            </div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Editor usa <code>document.execCommand</code> (compatibilidade ampla). Para produção, use um editor dedicado.</div>
+          </form>
+        `,
+        onPrimary: (wrap) => {
+          const fd = new FormData($('#noteForm', wrap));
+          const title = (fd.get('title')||'').toString().trim() || 'Sem título';
+          const tags = (fd.get('tags')||'').toString().split(',').map(x=>x.trim()).filter(Boolean);
+          const contentHtml = $('#noteEditor', wrap).innerHTML;
+
+          const payload = { title, tags, contentHtml, updatedAt: nowISO() };
+          if (isEdit) Object.assign(n, payload);
+          else state.data.notes.push({ id: uid(), ...payload, createdAt: nowISO() });
+
+          saveDataFor(state.user.id, state.data);
+          toast(isEdit ? 'Nota atualizada.' : 'Nota criada.', 'ok');
+          renderView();
+        }
+      });
+
+      const modal = $('.fixed.z-[60]');
+      if (!modal) return;
+      $$('.rt', modal).forEach(btn => btn.addEventListener('click', () => {
+        const cmd = btn.dataset.cmd;
+        if (cmd === 'createLink') {
+          const url = prompt('URL do link:');
+          if (url) document.execCommand('createLink', false, url);
+          return;
+        }
+        document.execCommand(cmd, false, null);
+      }));
+
+      // focus editor
+      setTimeout(() => $('#noteEditor', modal)?.focus(), 50);
+    }
+
+    function rtButton(cmd, title, label) {
+      return `<button type="button" class="rt px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" title="${title}" data-cmd="${cmd}">${label}</button>`;
+    }
+
+    async function deleteNote(id) {
+      const n = state.data.notes.find(x => x.id === id);
+      if (!n) return;
+      const ok = await confirmModal({
+        title: 'Excluir nota',
+        message: `Excluir “<b>${escapeHtml(n.title||'Sem título')}</b>”?`,
+        danger: true,
+        confirmText: 'Excluir'
+      });
+      if (!ok) return;
+      state.data.notes = state.data.notes.filter(x => x.id !== id);
+      saveDataFor(state.user.id, state.data);
+      toast('Nota excluída.', 'ok');
+      renderView();
+    }
+
+    function openDiaryModal(entryId=null) {
+      const d = entryId ? state.data.diary.find(x => x.id === entryId) : null;
+      const isEdit = !!d;
+      const date = d?.date || fmt.dateISO(new Date());
+
+      openModal({
+        title: isEdit ? 'Editar diário' : 'Nova entrada no diário',
+        wide: true,
+        primaryText: isEdit ? 'Salvar' : 'Criar',
+        bodyHtml: `
+          <form id="diaryForm" class="grid gap-3">
+            <div class="grid md:grid-cols-3 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Data
+                <input name="date" type="date" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(date)}" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Humor
+                <select name="mood" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  ${['😄','🙂','😐','🙁','😣','😌','🤩','😤'].map(m => `<option ${d?.mood===m?'selected':''} value="${m}">${m}</option>`).join('')}
+                </select>
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Clima
+                <select name="weather" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent">
+                  ${['☀️','⛅','🌧','🌩','❄️','🌫','🌬'].map(w => `<option ${d?.weather===w?'selected':''} value="${w}">${w}</option>`).join('')}
+                </select>
+              </label>
+            </div>
+
+            <div class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-3">
+              <div class="flex flex-wrap items-center gap-1">
+                ${rtButton('bold','Negrito','B')}
+                ${rtButton('italic','Itálico','I')}
+                ${rtButton('underline','Sublinhado','U')}
+                ${rtButton('insertUnorderedList','Lista','•')}
+                ${rtButton('insertOrderedList','Num','1.')}
+                <button type="button" class="rt px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" data-cmd="createLink">Link</button>
+                <button type="button" class="rt px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm" data-cmd="removeFormat">Limpar</button>
+              </div>
+            </div>
+
+            <div class="rounded-2xl soft-border bg-white/25 dark:bg-slate-950/20 p-4">
+              <div id="diaryEditor" contenteditable="true" class="min-h-[320px] outline-none prose-lite text-sm">${d?.contentHtml||'<p>Como foi seu dia?</p>'}</div>
+            </div>
+
+            <label class="text-xs text-slate-600 dark:text-slate-300">Anexos (URLs separados por linha)
+              <textarea name="attachments" rows="3" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" placeholder="https://...">${escapeHtml((d?.attachments||[]).join('\n'))}</textarea>
+            </label>
+          </form>
+        `,
+        onPrimary: (wrap) => {
+          const fd = new FormData($('#diaryForm', wrap));
+          const date = fd.get('date')?.toString() || fmt.dateISO(new Date());
+          const mood = fd.get('mood')?.toString() || '🙂';
+          const weather = fd.get('weather')?.toString() || '☀️';
+          const contentHtml = $('#diaryEditor', wrap).innerHTML;
+          const attachments = (fd.get('attachments')||'').toString().split('\n').map(x=>x.trim()).filter(Boolean);
+
+          const payload = { date, mood, weather, contentHtml, attachments, updatedAt: nowISO() };
+          if (isEdit) Object.assign(d, payload);
+          else state.data.diary.push({ id: uid(), ...payload, createdAt: nowISO() });
+
+          saveDataFor(state.user.id, state.data);
+          toast(isEdit ? 'Entrada atualizada.' : 'Entrada criada.', 'ok');
+          renderView();
+        }
+      });
+
+      const modal = $('.fixed.z-[60]');
+      if (!modal) return;
+      $$('.rt', modal).forEach(btn => btn.addEventListener('click', () => {
+        const cmd = btn.dataset.cmd;
+        if (cmd === 'createLink') {
+          const url = prompt('URL do link:');
+          if (url) document.execCommand('createLink', false, url);
+          return;
+        }
+        document.execCommand(cmd, false, null);
+      }));
+      setTimeout(() => $('#diaryEditor', modal)?.focus(), 50);
+    }
+
+    async function deleteDiary(id) {
+      const d = state.data.diary.find(x => x.id === id);
+      if (!d) return;
+      const ok = await confirmModal({
+        title: 'Excluir entrada',
+        message: `Excluir a entrada do dia <b>${escapeHtml(d.date)}</b>?`,
+        danger: true,
+        confirmText: 'Excluir'
+      });
+      if (!ok) return;
+      state.data.diary = state.data.diary.filter(x => x.id !== id);
+      saveDataFor(state.user.id, state.data);
+      toast('Entrada excluída.', 'ok');
+      renderView();
+    }
+
+    // -------------------------
+    // Health (optional module)
+    // -------------------------
+    function renderHealth() {
+      const logs = [...(state.data.health?.logs || [])].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+      const last = logs[0] || { date: fmt.dateISO(new Date()), waterMl: 0, sleepH: 0, weightKg: 0, exerciseMin: 0, mood: 3 };
+
+      return `
+        <div class="space-y-4 md:space-y-6 fade-in">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Água • sono • peso • exercícios • humor</div>
+              <div class="text-xl font-semibold">Saúde e Bem-estar</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btnLogHealth" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm inline-flex items-center gap-2">${Icons.plus('w-4 h-4')} Registrar hoje</button>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-4 gap-3">
+            ${kpiHealth('Água (ml)', last.waterMl || 0, 'Meta sugerida: 2000ml')}
+            ${kpiHealth('Sono (h)', last.sleepH || 0, 'Qualidade importa')}
+            ${kpiHealth('Exercício (min)', last.exerciseMin || 0, 'Movimento diário')}
+            ${kpiHealth('Humor (1–5)', last.mood || 3, 'Auto-percepção')}
+          </div>
+
+          <div class="grid lg:grid-cols-2 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold">Evolução (14 dias)</div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Água e Sono</div>
+              <div class="mt-3"><canvas id="chartHealth" height="190"></canvas></div>
+            </div>
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold">Peso & Exercício (14 dias)</div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Acompanhe tendência</div>
+              <div class="mt-3"><canvas id="chartHealth2" height="190"></canvas></div>
+            </div>
+          </div>
+
+          <div class="glass2 rounded-3xl p-4 md:p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-semibold">Histórico</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">Últimos registros</div>
+              </div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">${logs.length} dias</div>
+            </div>
+            <div class="mt-3 overflow-auto mini-scroll">
+              <table class="w-full text-sm">
+                <thead class="text-xs text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th class="text-left py-2">Data</th>
+                    <th class="text-right py-2">Água</th>
+                    <th class="text-right py-2">Sono</th>
+                    <th class="text-right py-2">Peso</th>
+                    <th class="text-right py-2">Exerc.</th>
+                    <th class="text-right py-2">Humor</th>
+                    <th class="text-right py-2">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${logs.length ? logs.map(healthRow).join('') : `<tr><td colspan="7" class="py-6"><div class="text-slate-600 dark:text-slate-300">Sem registros.</div></td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function kpiHealth(title, value, hint) {
+      return `
+        <div class="glass2 rounded-3xl p-4">
+          <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">${title}</div>
+          <div class="mt-2 text-lg font-semibold">${Number(value).toLocaleString('pt-BR')}</div>
+          <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">${hint}</div>
+        </div>
+      `;
+    }
+
+    function healthRow(l) {
+      return `
+        <tr class="border-t border-slate-200/50 dark:border-slate-700/40">
+          <td class="py-3 text-slate-600 dark:text-slate-300">${escapeHtml(l.date)}</td>
+          <td class="py-3 text-right">${Number(l.waterMl||0).toLocaleString('pt-BR')} ml</td>
+          <td class="py-3 text-right">${Number(l.sleepH||0).toLocaleString('pt-BR')}</td>
+          <td class="py-3 text-right">${l.weightKg ? Number(l.weightKg).toLocaleString('pt-BR')+' kg' : '—'}</td>
+          <td class="py-3 text-right">${Number(l.exerciseMin||0).toLocaleString('pt-BR')} min</td>
+          <td class="py-3 text-right">${Number(l.mood||3)}</td>
+          <td class="py-3 text-right">
+            <button class="btnEditHealth px-3 py-2 rounded-xl soft-border hover:soft-bg text-xs" data-id="${l.id}">Editar</button>
+            <button class="btnDelHealth px-3 py-2 rounded-xl soft-border hover:soft-bg text-xs" data-id="${l.id}">Excluir</button>
+          </td>
+        </tr>
+      `;
+    }
+
+    function bindHealth() {
+      $('#btnLogHealth')?.addEventListener('click', () => openHealthModal());
+      $$('.btnEditHealth').forEach(b => b.addEventListener('click', () => openHealthModal(b.dataset.id)));
+      $$('.btnDelHealth').forEach(b => b.addEventListener('click', () => deleteHealthLog(b.dataset.id)));
+      renderHealthCharts();
+    }
+
+    function openHealthModal(logId=null) {
+      state.data.health = state.data.health || { logs: [] };
+      const l = logId ? state.data.health.logs.find(x => x.id === logId) : null;
+      const isEdit = !!l;
+      const todayIso = fmt.dateISO(new Date());
+      const base = l || { date: todayIso, waterMl: 0, sleepH: 0, weightKg: 0, exerciseMin: 0, mood: 3 };
+
+      openModal({
+        title: isEdit ? 'Editar registro' : 'Registrar saúde',
+        primaryText: isEdit ? 'Salvar' : 'Registrar',
+        bodyHtml: `
+          <form id="healthForm" class="grid gap-3">
+            <label class="text-xs text-slate-600 dark:text-slate-300">Data
+              <input name="date" type="date" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(base.date)}" />
+            </label>
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Água (ml)
+                <input name="waterMl" type="number" min="0" step="50" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(String(base.waterMl||0))}" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Sono (horas)
+                <input name="sleepH" type="number" min="0" step="0.1" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(String(base.sleepH||0))}" />
+              </label>
+            </div>
+            <div class="grid md:grid-cols-2 gap-3">
+              <label class="text-xs text-slate-600 dark:text-slate-300">Peso (kg)
+                <input name="weightKg" type="number" min="0" step="0.1" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(String(base.weightKg||0))}" />
+              </label>
+              <label class="text-xs text-slate-600 dark:text-slate-300">Exercícios (min)
+                <input name="exerciseMin" type="number" min="0" step="5" class="mt-1 w-full px-3 py-2 rounded-xl soft-border bg-transparent" value="${escapeAttr(String(base.exerciseMin||0))}" />
+              </label>
+            </div>
+            <label class="text-xs text-slate-600 dark:text-slate-300">Humor (1-5)
+              <input name="mood" type="range" min="1" max="5" value="${escapeAttr(String(base.mood||3))}" class="w-full" />
+            </label>
+          </form>
+        `,
+        onPrimary: (wrap) => {
+          const fd = new FormData($('#healthForm', wrap));
+          const payload = {
+            date: fd.get('date')?.toString() || todayIso,
+            waterMl: Number(fd.get('waterMl')||0),
+            sleepH: Number(fd.get('sleepH')||0),
+            weightKg: Number(fd.get('weightKg')||0),
+            exerciseMin: Number(fd.get('exerciseMin')||0),
+            mood: Number(fd.get('mood')||3)
+          };
+
+          if (isEdit) Object.assign(l, payload);
+          else state.data.health.logs.push({ id: uid(), ...payload, createdAt: nowISO() });
+
+          saveDataFor(state.user.id, state.data);
+          toast(isEdit ? 'Registro atualizado.' : 'Registro salvo.', 'ok');
+          renderView();
+        }
+      });
+    }
+
+    async function deleteHealthLog(id) {
+      const l = state.data.health?.logs?.find(x => x.id === id);
+      if (!l) return;
+      const ok = await confirmModal({
+        title: 'Excluir registro',
+        message: `Excluir registro de <b>${escapeHtml(l.date)}</b>?`,
+        danger: true,
+        confirmText: 'Excluir'
+      });
+      if (!ok) return;
+      state.data.health.logs = state.data.health.logs.filter(x => x.id !== id);
+      saveDataFor(state.user.id, state.data);
+      toast('Registro excluído.', 'ok');
+      renderView();
+    }
+
+    function renderHealthCharts() {
+      const isDark = document.documentElement.classList.contains('dark');
+      const gridColor = isDark ? 'rgba(148,163,184,.18)' : 'rgba(15,23,42,.08)';
+      const tickColor = isDark ? 'rgba(226,232,240,.75)' : 'rgba(30,41,59,.7)';
+
+      const logs = [...(state.data.health?.logs || [])].sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+      const last14 = logs.slice(-14);
+      const labels = last14.map(l => l.date.slice(5));
+      const water = last14.map(l => Number(l.waterMl||0));
+      const sleep = last14.map(l => Number(l.sleepH||0));
+      const weight = last14.map(l => Number(l.weightKg||0));
+      const ex = last14.map(l => Number(l.exerciseMin||0));
+
+      const ctx1 = $('#chartHealth');
+      if (ctx1) {
+        state.charts.health = new Chart(ctx1, {
+          type: 'line',
+          data: { labels, datasets: [
+            { label:'Água (ml)', data: water, borderColor:'rgba(59,130,246,.85)', backgroundColor:'rgba(59,130,246,.15)', tension:.35, fill:true, pointRadius:2 },
+            { label:'Sono (h)', data: sleep, borderColor:'rgba(168,85,247,.85)', backgroundColor:'rgba(168,85,247,.12)', tension:.35, fill:false, pointRadius:2 }
+          ]},
+          options: {
+            plugins: { legend: { labels: { color: tickColor } } },
+            scales: {
+              x: { grid: { display:false }, ticks: { color: tickColor } },
+              y: { beginAtZero:true, grid: { color: gridColor }, ticks: { color: tickColor } }
+            }
+          }
+        });
+      }
+
+      const ctx2 = $('#chartHealth2');
+      if (ctx2) {
+        state.charts.health2 = new Chart(ctx2, {
+          type: 'bar',
+          data: { labels, datasets: [
+            { label:'Exercício (min)', data: ex, backgroundColor:'rgba(16,185,129,.55)', borderRadius:10 },
+            { label:'Peso (kg)', data: weight, backgroundColor:'rgba(245,158,11,.45)', borderRadius:10 }
+          ]},
+          options: {
+            plugins: { legend: { labels: { color: tickColor } } },
+            scales: {
+              x: { grid: { display:false }, ticks: { color: tickColor } },
+              y: { beginAtZero:true, grid: { color: gridColor }, ticks: { color: tickColor } }
+            }
+          }
+        });
+      }
+    }
+
+    // -------------------------
+    // Settings / Backup
+    // -------------------------
+    function renderSettings() {
+      const theme = getTheme();
+      const budget = Number(state.data.meta.budgetMonth || 0);
+      const dataSize = JSON.stringify(state.data).length;
+
+      return `
+        <div class="space-y-4 md:space-y-6 fade-in">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm text-slate-600 dark:text-slate-300">Tema • backup • exportação/importação • conta</div>
+              <div class="text-xl font-semibold">Configurações</div>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-3 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold">Aparência</div>
+              <div class="mt-3 space-y-2">
+                <button id="btnToggleTheme" class="w-full px-4 py-2 rounded-xl soft-border hover:soft-bg text-sm flex items-center justify-between">
+                  <span>Tema</span>
+                  <span class="text-slate-600 dark:text-slate-300">${theme}</span>
+                </button>
+                <div class="text-xs text-slate-500 dark:text-slate-400">Preferência salva localmente.</div>
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold">Finanças</div>
+              <div class="mt-3 space-y-2">
+                <div class="rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+                  <div class="text-xs text-slate-500 dark:text-slate-400">Orçamento mensal</div>
+                  <div class="mt-1 font-semibold">${fmt.money(budget)}</div>
+                  <button id="btnEditBudget" class="mt-3 px-3 py-2 rounded-xl soft-border hover:soft-bg text-sm">Editar orçamento</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold">Notificações</div>
+              <div class="mt-3 space-y-2">
+                <button id="btnAskNotif" class="w-full px-4 py-2 rounded-xl soft-border hover:soft-bg text-sm flex items-center justify-between">
+                  <span>Permissão</span>
+                  <span class="text-slate-600 dark:text-slate-300">${('Notification' in window) ? Notification.permission : 'não suportado'}</span>
+                </button>
+                <div class="text-xs text-slate-500 dark:text-slate-400">Lembretes funcionam com o app aberto.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass2 rounded-3xl p-4 md:p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-semibold">Backup & Dados</div>
+                <div class="text-sm text-slate-600 dark:text-slate-300">Exportar/importar JSON • tamanho aproximado: ${(dataSize/1024).toFixed(1)} KB</div>
+              </div>
+            </div>
+            <div class="mt-4 grid md:grid-cols-2 gap-3">
+              <button id="btnExport" class="px-4 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm flex items-center justify-center gap-2">${Icons.download('w-4 h-4')} Exportar backup (.json)</button>
+              <label class="px-4 py-3 rounded-2xl soft-border hover:soft-bg text-sm flex items-center justify-center gap-2 cursor-pointer">
+                ${Icons.upload('w-4 h-4')} Importar backup
+                <input id="fileImport" type="file" accept="application/json" class="hidden" />
+              </label>
+            </div>
+            <div class="mt-3 text-xs text-slate-500 dark:text-slate-400">A importação substitui os dados do usuário atual.</div>
+          </div>
+
+          <div class="grid lg:grid-cols-2 gap-4 md:gap-6">
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold">Conta</div>
+              <div class="mt-3 space-y-2">
+                <div class="rounded-2xl soft-border bg-white/30 dark:bg-slate-950/20 p-4">
+                  <div class="text-xs text-slate-500 dark:text-slate-400">Usuário</div>
+                  <div class="mt-1 font-semibold">${escapeHtml(state.user.name)}</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-300">${escapeHtml(state.user.email)}</div>
+                </div>
+                <button id="btnLogout2" class="w-full px-4 py-2 rounded-xl soft-border hover:soft-bg text-sm flex items-center justify-center gap-2">${Icons.logout('w-4 h-4')} Sair</button>
+              </div>
+            </div>
+
+            <div class="glass2 rounded-3xl p-4 md:p-5">
+              <div class="font-semibold text-rose-700 dark:text-rose-300">Zona de risco</div>
+              <div class="mt-3 space-y-2">
+                <button id="btnResetData" class="w-full px-4 py-3 rounded-2xl border border-rose-600/30 bg-rose-600/10 hover:bg-rose-600/15 text-rose-800 dark:text-rose-200 text-sm">Resetar dados deste usuário</button>
+                <button id="btnDeleteUser" class="w-full px-4 py-3 rounded-2xl border border-rose-600/30 bg-rose-600/10 hover:bg-rose-600/15 text-rose-800 dark:text-rose-200 text-sm">Excluir conta local</button>
+                <div class="text-xs text-slate-500 dark:text-slate-400">Antes de apagar, exporte seu backup.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function bindSettings() {
+      $('#btnToggleTheme')?.addEventListener('click', () => { setTheme(getTheme()==='dark'?'light':'dark'); render(); });
+      $('#btnEditBudget')?.addEventListener('click', openBudgetModal);
+      $('#btnAskNotif')?.addEventListener('click', ensureNotifications);
+      $('#btnLogout2')?.addEventListener('click', logout);
+
+      $('#btnExport')?.addEventListener('click', () => exportBackup());
+      $('#fileImport')?.addEventListener('change', (e) => importBackup(e.target.files?.[0]));
+
+      $('#btnResetData')?.addEventListener('click', async () => {
+        const ok = await confirmModal({
+          title: 'Resetar dados',
+          message: 'Isso apagará todos os dados (tarefas, hábitos, metas, etc.) deste usuário e recriará dados padrão.',
+          danger: true,
+          confirmText: 'Resetar'
+        });
+        if (!ok) return;
+        state.data = defaultData();
+        saveDataFor(state.user.id, state.data);
+        toast('Dados resetados.', 'ok');
+        render();
+      });
+
+      $('#btnDeleteUser')?.addEventListener('click', async () => {
+        const ok = await confirmModal({
+          title: 'Excluir conta local',
+          message: 'Isso removerá seu usuário e dados do navegador. Não há como recuperar sem backup.',
+          danger: true,
+          confirmText: 'Excluir'
+        });
+        if (!ok) return;
+        // remove data
+        storage.del(getUserDataKey(state.user.id));
+        // remove user
+        const users = getUsers().filter(u => u.id !== state.user.id);
+        setUsers(users);
+        logout();
+      });
+    }
+
+    function exportBackup() {
+      const payload = {
+        app: 'pgp',
+        version: 1,
+        exportedAt: nowISO(),
+        user: { id: state.user.id, email: state.user.email, name: state.user.name },
+        data: state.data
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `backup-gestao-pessoal-${state.user.email.replace(/[^a-z0-9]+/gi,'_')}-${fmt.dateISO(new Date())}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Backup exportado.', 'ok');
+    }
+
+    async function importBackup(file) {
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        if (!json?.data) throw new Error('Arquivo inválido.');
+        const ok = await confirmModal({
+          title: 'Importar backup',
+          message: 'Isso substituirá os dados do usuário atual. Deseja continuar?',
+          danger: true,
+          confirmText: 'Importar'
+        });
+        if (!ok) return;
+        state.data = json.data;
+        saveDataFor(state.user.id, state.data);
+        toast('Backup importado com sucesso.', 'ok');
+        render();
+      } catch (e) {
+        toast(e.message || 'Falha ao importar.', 'err');
+      }
+    }
+
+    // -------------------------
+    // Utilities
+    // -------------------------
+    function escapeHtml(s) {
+      return (s ?? '').toString()
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'",'&#39;');
+    }
+    function escapeAttr(s) { return escapeHtml(s).replaceAll('\n',' '); }
+
+    function stripHtml(html) {
+      const d = document.createElement('div');
+      d.innerHTML = html || '';
+      return (d.textContent || d.innerText || '').trim();
+    }
+
+    // -------------------------
+    // Boot
+    // -------------------------
+    (function init() {
+      // theme
+      setTheme(getTheme());
+      render();
+    })();
+  </script>
+</body>
+</html>
